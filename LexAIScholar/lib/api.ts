@@ -1,7 +1,3 @@
-/**
- * API Client for LexAI Scholar Backend
- */
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export interface Document {
@@ -45,9 +41,6 @@ class APIClient {
     return headers;
   }
 
-  /**
-   * Upload a PDF document
-   */
   async uploadPDF(file: File, token: string): Promise<any> {
     try {
       const formData = new FormData();
@@ -89,9 +82,6 @@ class APIClient {
     }
   }
 
-  /**
-   * Search documents semantically
-   */
   async searchDocuments(
     query: string,
     token: string,
@@ -112,9 +102,6 @@ class APIClient {
     return response.json();
   }
 
-  /**
-   * Get all documents for the user
-   */
   async getDocuments(token: string): Promise<Document[]> {
     const response = await fetch(`${API_BASE_URL}/documents`, {
       method: 'GET',
@@ -129,9 +116,6 @@ class APIClient {
     return response.json();
   }
 
-  /**
-   * Get a specific document
-   */
   async getDocument(documentId: string, token: string): Promise<Document> {
     const response = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
       method: 'GET',
@@ -146,9 +130,6 @@ class APIClient {
     return response.json();
   }
 
-  /**
-   * Delete a document
-   */
   async deleteDocument(documentId: string, token: string): Promise<any> {
     const response = await fetch(`${API_BASE_URL}/documents/${documentId}`, {
       method: 'DELETE',
@@ -163,9 +144,6 @@ class APIClient {
     return response.json();
   }
 
-  /**
-   * Get vector database stats
-   */
   async getVectorStats(token: string): Promise<any> {
     const response = await fetch(`${API_BASE_URL}/vector-stats`, {
       method: 'GET',
@@ -180,9 +158,6 @@ class APIClient {
     return response.json();
   }
 
-  /**
-   * Health check
-   */
   async healthCheck(): Promise<any> {
     const response = await fetch(`${API_BASE_URL}/health`);
     

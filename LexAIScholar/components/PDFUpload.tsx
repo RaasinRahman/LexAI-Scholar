@@ -50,14 +50,12 @@ export default function PDFUpload({ onUploadSuccess }: PDFUploadProps) {
     setError(null);
     setUploadResult(null);
     
-    // Validate file type
     if (!file.name.toLowerCase().endsWith('.pdf')) {
       setError('Only PDF files are supported');
       return;
     }
     
-    // Validate file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+    const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
       setError('File size must be less than 50MB');
       return;
@@ -73,7 +71,6 @@ export default function PDFUpload({ onUploadSuccess }: PDFUploadProps) {
   };
 
   const handleUpload = async () => {
-    // Enhanced validation with detailed error messages
     if (!selectedFile) {
       setError('No file selected');
       return;
@@ -99,7 +96,6 @@ export default function PDFUpload({ onUploadSuccess }: PDFUploadProps) {
       console.log('File size:', selectedFile.size, 'bytes');
       console.log('Using token:', session.access_token.substring(0, 20) + '...');
       
-      // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => {
           if (prev >= 90) {
@@ -119,12 +115,10 @@ export default function PDFUpload({ onUploadSuccess }: PDFUploadProps) {
       setUploadResult(result);
       setSelectedFile(null);
       
-      // Call success callback
       if (onUploadSuccess) {
         onUploadSuccess(result);
       }
       
-      // Reset progress after a delay
       setTimeout(() => {
         setUploadProgress(0);
       }, 2000);

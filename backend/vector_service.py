@@ -1,7 +1,3 @@
-"""
-Vector Embedding and Pinecone Integration Service
-Handles embedding generation and vector database operations
-"""
 from sentence_transformers import SentenceTransformer
 from pinecone import Pinecone, ServerlessSpec
 from typing import List, Dict, Any, Optional
@@ -10,61 +6,39 @@ import hashlib
 
 
 class VectorService:
-    """
-    Service for generating embeddings and managing vector database operations
-    """
-    
-    def __init__(self, pinecone_api_key: str, index_name: str = "lexai-documents"):
-        """
-        Initialize the vector service with Pinecone
+    def __init__(self, pinecone_api_key: str, index_name: str = "lexai-qa-index"):
+        print("Loading embedding model (multi-qa-mpnet-base-dot-v1)...")
+        self.embedding_model = SentenceTransformer('multi-qa-mpnet-base-dot-v1')
+        self.embedding_dimension = 768
         
-        Args:
-            pinecone_api_key: Pinecone API key
-            index_name: Name of the Pinecone index to use
-        """
-        # Initialize embedding model
-        # Using 'all-MiniLM-L6-v2' - fast, efficient, 384 dimensions
-        print("Loading embedding model...")
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        self.embedding_dimension = 384  # Dimension for all-MiniLM-L6-v2
-        
-        # Initialize Pinecone
         print("Initializing Pinecone...")
         self.pc = Pinecone(api_key=pinecone_api_key)
         self.index_name = index_name
         
-        # Create or connect to index
         self._initialize_index()
         
     def _initialize_index(self):
-        """
-        Create Pinecone index if it doesn't exist, or connect to existing one
-        """
         try:
-            # List existing indexes
             existing_indexes = [index.name for index in self.pc.list_indexes()]
             
             if self.index_name not in existing_indexes:
                 print(f"Creating new Pinecone index: {self.index_name}")
                 
-                # Create index with serverless spec (free tier)
                 self.pc.create_index(
                     name=self.index_name,
                     dimension=self.embedding_dimension,
-                    metric="cosine",  # cosine similarity for semantic search
+                    metric="cosine",
                     spec=ServerlessSpec(
                         cloud="aws",
-                        region="us-east-1"  # Free tier region
+                        region="us-east-1"
                     )
                 )
                 
-                # Wait for index to be ready
                 print("Waiting for index to be ready...")
                 time.sleep(10)
             else:
                 print(f"Connecting to existing index: {self.index_name}")
             
-            # Connect to the index
             self.index = self.pc.Index(self.index_name)
             print(f"Successfully connected to index: {self.index_name}")
             
@@ -73,43 +47,38 @@ class VectorService:
             raise
     
     def generate_embedding(self, text: str) -> List[float]:
-        """
-        Generate embedding vector for a given text
-        
-        Args:
-            text: Text to embed
-            
-        Returns:
-            List of floats representing the embedding vector
-        """
         try:
-            embedding = self.embedding_model.encode(text, convert_to_tensor=False)
+            processed_text = self._preprocess_text(text)
+            embedding = self.embedding_model.encode(processed_text, convert_to_tensor=False, normalize_embeddings=True)
             return embedding.tolist()
         except Exception as e:
             print(f"Error generating embedding: {e}")
             raise
     
-    def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
-        """
-        Generate embeddings for multiple texts in batch (more efficient)
+    def _preprocess_text(self, text: str) -> str:
+        max_length = 512
+        if len(text) > 2000:
+            text = text[:2000]
         
-        Args:
-            texts: List of texts to embed
-            
-        Returns:
-            List of embedding vectors
-        """
+        text = ' '.join(text.split())
+        
+        return text
+    
+    def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         try:
-            embeddings = self.embedding_model.encode(texts, convert_to_tensor=False, show_progress_bar=True)
+            processed_texts = [self._preprocess_text(text) for text in texts]
+            embeddings = self.embedding_model.encode(
+                processed_texts, 
+                convert_to_tensor=False, 
+                show_progress_bar=True,
+                normalize_embeddings=True
+            )
             return embeddings.tolist()
         except Exception as e:
             print(f"Error generating batch embeddings: {e}")
             raise
     
     def _generate_chunk_id(self, user_id: str, filename: str, chunk_id: int) -> str:
-        """
-        Generate a unique ID for a chunk
-        """
         unique_string = f"{user_id}_{filename}_{chunk_id}_{int(time.time())}"
         return hashlib.md5(unique_string.encode()).hexdigest()
     
@@ -119,29 +88,15 @@ class VectorService:
         user_id: str,
         document_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Generate embeddings for chunks and store in Pinecone
-        
-        Args:
-            chunks: List of text chunks with metadata
-            user_id: User ID for filtering
-            document_id: Optional document ID for tracking
-            
-        Returns:
-            Dictionary with storage results
-        """
         try:
             if not chunks:
                 return {"success": False, "error": "No chunks to process"}
             
-            # Extract texts for batch embedding
             texts = [chunk["text"] for chunk in chunks]
             
-            # Generate embeddings in batch
             print(f"Generating embeddings for {len(texts)} chunks...")
             embeddings = self.generate_embeddings_batch(texts)
             
-            # Prepare vectors for upsert
             vectors = []
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 vector_id = self._generate_chunk_id(
@@ -150,12 +105,11 @@ class VectorService:
                     i
                 )
                 
-                # Build metadata, ensuring no None values (Pinecone doesn't accept null)
                 metadata = {
                     "user_id": user_id,
                     "document_id": document_id or "unknown",
                     "chunk_id": chunk.get("chunk_id", i),
-                    "text": chunk["text"][:1000],  # Store first 1000 chars in metadata
+                    "text": chunk["text"][:1000],
                     "filename": chunk.get("filename") or "unknown",
                     "title": chunk.get("title") or "",
                     "author": chunk.get("author") or "",
@@ -170,7 +124,6 @@ class VectorService:
                     "metadata": metadata
                 })
             
-            # Upsert to Pinecone in batches of 100
             batch_size = 100
             print(f"Uploading {len(vectors)} vectors to Pinecone...")
             
@@ -188,41 +141,68 @@ class VectorService:
             print(f"Error storing document chunks: {e}")
             return {"success": False, "error": str(e)}
     
+    def _expand_query(self, query: str) -> str:
+        expanded = query
+        
+        words = query.split()
+        if len(words) <= 2:
+            expanded = f"Information about {query}. Details regarding {query}."
+        
+        return expanded
+    
+    def _rerank_results(self, results: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
+        import re
+        
+        query_lower = query.lower()
+        query_words = set(re.findall(r'\w+', query_lower))
+        
+        for result in results:
+            text_lower = result['text'].lower()
+            text_words = set(re.findall(r'\w+', text_lower))
+            
+            overlap = len(query_words.intersection(text_words))
+            overlap_ratio = overlap / max(len(query_words), 1)
+            
+            keyword_bonus = overlap_ratio * 0.1
+            result['original_score'] = result['score']
+            result['score'] = min(1.0, result['score'] + keyword_bonus)
+            result['keyword_overlap'] = overlap
+        
+        results.sort(key=lambda x: x['score'], reverse=True)
+        
+        return results
+    
     def search_similar(
         self, 
         query: str, 
         user_id: str,
         top_k: int = 5,
-        min_score: float = 0.5
+        min_score: float = 0.3
     ) -> List[Dict[str, Any]]:
-        """
-        Search for similar chunks using semantic search
-        
-        Args:
-            query: Search query text
-            user_id: User ID for filtering results
-            top_k: Number of results to return
-            min_score: Minimum similarity score (0-1)
-            
-        Returns:
-            List of matching chunks with metadata and scores
-        """
         try:
-            # Generate query embedding
-            query_embedding = self.generate_embedding(query)
+            print(f"🔍 Original query: '{query}'")
             
-            # Search in Pinecone with user filter
+            expanded_query = self._expand_query(query)
+            if expanded_query != query:
+                print(f"🔍 Expanded query: '{expanded_query}'")
+            
+            print(f"🔍 Generating embedding...")
+            query_embedding = self.generate_embedding(expanded_query)
+            print(f"✓ Embedding generated (dimension: {len(query_embedding)})")
+            
+            print(f"🔍 Querying Pinecone for user: {user_id}")
             results = self.index.query(
                 vector=query_embedding,
-                top_k=top_k,
+                top_k=top_k * 4,
                 include_metadata=True,
                 filter={"user_id": {"$eq": user_id}}
             )
             
-            # Format results
+            print(f"✓ Pinecone returned {len(results.matches)} matches")
+            
             matches = []
             for match in results.matches:
-                if match.score >= min_score:
+                if match.score >= 0.20:
                     matches.append({
                         "id": match.id,
                         "score": float(match.score),
@@ -234,25 +214,29 @@ class VectorService:
                         "document_id": match.metadata.get("document_id", "")
                     })
             
+            print(f"✓ Initial matches: {len(matches)} (score >= 0.20)")
+            
+            if matches:
+                matches = self._rerank_results(matches, query)
+                print(f"✓ Reranked results")
+            
+            matches = [m for m in matches if m['score'] >= min_score]
+            matches = matches[:top_k]
+            
+            print(f"✓ Returning {len(matches)} matches (final threshold: {min_score})")
+            for i, match in enumerate(matches[:3]):
+                print(f"   #{i+1}: score={match['score']:.3f}, keyword_overlap={match.get('keyword_overlap', 0)}")
+            
             return matches
             
         except Exception as e:
-            print(f"Error searching vectors: {e}")
+            print(f"✗ Error searching vectors: {e}")
+            import traceback
+            traceback.print_exc()
             raise
     
     def delete_document(self, document_id: str, user_id: str) -> Dict[str, Any]:
-        """
-        Delete all chunks associated with a document
-        
-        Args:
-            document_id: Document ID to delete
-            user_id: User ID for verification
-            
-        Returns:
-            Deletion result
-        """
         try:
-            # Delete by filter
             self.index.delete(
                 filter={
                     "document_id": {"$eq": document_id},
@@ -267,9 +251,6 @@ class VectorService:
             return {"success": False, "error": str(e)}
     
     def get_index_stats(self) -> Dict[str, Any]:
-        """
-        Get statistics about the Pinecone index
-        """
         try:
             stats = self.index.describe_index_stats()
             return {

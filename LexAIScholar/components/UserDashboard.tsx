@@ -14,9 +14,7 @@ export default function UserDashboard() {
   const fullName = user?.user_metadata?.full_name || 'User';
 
   const handleUploadSuccess = () => {
-    // Trigger document library refresh
     setRefreshDocuments(!refreshDocuments);
-    // Optionally switch to library tab
     setTimeout(() => {
       setActiveTab('library');
     }, 2000);

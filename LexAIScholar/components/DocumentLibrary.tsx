@@ -46,7 +46,6 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
 
     try {
       await api.deleteDocument(documentId, session.access_token);
-      // Remove from local state
       setDocuments(documents.filter(doc => doc.id !== documentId));
     } catch (err: any) {
       alert(`Failed to delete document: ${err.message}`);

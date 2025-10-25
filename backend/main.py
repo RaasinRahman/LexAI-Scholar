@@ -8,7 +8,6 @@ from typing import Optional, List
 from datetime import datetime
 import uuid
 
-# Import our custom services
 from pdf_service import PDFProcessor
 from vector_service import VectorService
 
@@ -16,10 +15,9 @@ load_dotenv()
 
 app = FastAPI(title="LexAI Scholar API")
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Next.js dev server
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,27 +27,20 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "pcsk_6uGvNp_3XAvNGrsf3LKYPzKq42ovqnHatj3J4RJzdx6xhmawsj9jza7K1nskPxsEQrDkfo")
 
-# Initialize supabase client only if credentials are provided
 if SUPABASE_URL and SUPABASE_KEY:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 else:
     supabase = None
     print("Warning: Supabase credentials not found. Authentication will not work.")
 
-# Initialize PDF Processor
 pdf_processor = PDFProcessor()
 
-# Initialize Vector Service (Pinecone)
 try:
     vector_service = VectorService(pinecone_api_key=PINECONE_API_KEY)
     print("✓ Vector service initialized successfully")
 except Exception as e:
     vector_service = None
     print(f"✗ Failed to initialize vector service: {e}")
-
-# ========================================
-# Pydantic Models
-# ========================================
 
 class SignUpRequest(BaseModel):
     email: EmailStr
@@ -74,8 +65,8 @@ class UserResponse(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
-    top_k: Optional[int] = 5
-    min_score: Optional[float] = 0.5
+    top_k: Optional[int] = 10
+    min_score: Optional[float] = 0.25
 
 class DocumentResponse(BaseModel):
     document_id: str
@@ -87,26 +78,15 @@ class DocumentResponse(BaseModel):
     character_count: int
     uploaded_at: str
 
-# ========================================
-# Authentication Helper
-# ========================================
-
 def get_user_supabase_client(access_token: str) -> Client:
-    """
-    Create a Supabase client with user's access token for RLS operations
-    This ensures RLS policies work correctly
-    """
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
-    # Create a new client with the user's token
     user_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    # Set the auth token for this client
     user_client.postgrest.auth(access_token)
     return user_client
 
 async def get_current_user(authorization: Optional[str] = Header(None)):
-    """Verify JWT token and return user"""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header missing")
     
@@ -116,17 +96,12 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
     token = authorization.replace("Bearer ", "")
     
     try:
-        # Verify token with Supabase
         user = supabase.auth.get_user(token)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid token")
         return user
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
-
-# ========================================
-# Routes
-# ========================================
 
 @app.get("/")
 def root():
@@ -138,7 +113,6 @@ def root():
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint"""
     return {
         "status": "healthy",
         "supabase_configured": supabase is not None,
@@ -146,18 +120,12 @@ def health_check():
         "timestamp": datetime.utcnow().isoformat()
     }
 
-# ========================================
-# Authentication Endpoints
-# ========================================
-
 @app.post("/auth/signup")
 async def sign_up(request: SignUpRequest):
-    """Register a new user"""
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
     try:
-        # Create user in Supabase Auth
         response = supabase.auth.sign_up({
             "email": request.email,
             "password": request.password,
@@ -189,7 +157,6 @@ async def sign_up(request: SignUpRequest):
 
 @app.post("/auth/signin")
 async def sign_in(request: SignInRequest):
-    """Sign in an existing user"""
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -219,7 +186,6 @@ async def sign_in(request: SignInRequest):
 
 @app.post("/auth/signout")
 async def sign_out(current_user = Depends(get_current_user)):
-    """Sign out the current user"""
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -231,7 +197,6 @@ async def sign_out(current_user = Depends(get_current_user)):
 
 @app.get("/auth/me")
 async def get_current_user_profile(current_user = Depends(get_current_user)):
-    """Get current user's profile"""
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -242,7 +207,6 @@ async def get_current_user_profile(current_user = Depends(get_current_user)):
         if profile.data and len(profile.data) > 0:
             return profile.data[0]
         else:
-            # Return basic user info if profile doesn't exist yet
             return {
                 "id": user_id,
                 "email": current_user.user.email
@@ -255,7 +219,6 @@ async def update_profile(
     request: UpdateProfileRequest,
     current_user = Depends(get_current_user)
 ):
-    """Update user profile"""
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -272,20 +235,14 @@ async def update_profile(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-# ========================================
-# Document Endpoints (Protected)
-# ========================================
-
 @app.get("/documents")
 async def get_user_documents(
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """Get all documents for the current user"""
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
-    # Extract access token for user-authenticated Supabase client
     access_token = authorization.replace("Bearer ", "") if authorization else None
     if not access_token:
         raise HTTPException(status_code=401, detail="Access token required")
@@ -307,7 +264,6 @@ async def get_user_documents(
 
 @app.get("/study-materials")
 async def get_user_study_materials(current_user = Depends(get_current_user)):
-    """Get all study materials for the current user"""
     if supabase is None:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -318,7 +274,6 @@ async def get_user_study_materials(current_user = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-# Legacy endpoint (keeping for compatibility)
 @app.get("/users")
 def get_users():
     if supabase is None:
@@ -326,34 +281,21 @@ def get_users():
     data = supabase.table("profiles").select("*").execute()
     return data.data
 
-# ========================================
-# PDF Processing Endpoints
-# ========================================
-
 @app.post("/documents/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """
-    Upload and process a PDF document
-    - Extracts text
-    - Generates chunks
-    - Creates embeddings
-    - Stores in vector database
-    """
     if not vector_service:
         raise HTTPException(status_code=500, detail="Vector service not configured")
     
     if not supabase:
         raise HTTPException(status_code=500, detail="Database not configured. Cannot store document metadata.")
     
-    # Validate file type
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
     
-    # Extract access token for user-authenticated Supabase client
     access_token = authorization.replace("Bearer ", "") if authorization else None
     if not access_token:
         raise HTTPException(status_code=401, detail="Access token required")
@@ -361,20 +303,15 @@ async def upload_pdf(
     try:
         user_id = current_user.user.id
         
-        # Create user-authenticated Supabase client for RLS operations
         user_supabase = get_user_supabase_client(access_token)
         
-        # Read PDF file
         pdf_content = await file.read()
         
-        # Process PDF
         print(f"Processing PDF: {file.filename}")
         processing_result = pdf_processor.process_pdf(pdf_content, file.filename)
         
-        # Generate unique document ID
         document_id = str(uuid.uuid4())
         
-        # Store chunks in vector database
         print(f"Storing {len(processing_result['chunks'])} chunks in vector database")
         storage_result = vector_service.store_document_chunks(
             chunks=processing_result['chunks'],
@@ -388,7 +325,6 @@ async def upload_pdf(
                 detail=f"Failed to store document: {storage_result.get('error')}"
             )
         
-        # Store document metadata in Supabase using user-authenticated client
         try:
             doc_metadata = {
                 "id": document_id,
@@ -406,10 +342,8 @@ async def upload_pdf(
             print(f"Attempting to save document metadata to Supabase...")
             print(f"Document ID: {document_id}, User ID: {user_id}")
             
-            # Use user-authenticated client for RLS
             result = user_supabase.table("documents").insert(doc_metadata).execute()
             
-            # Check if insert was successful
             if result.data and len(result.data) > 0:
                 print(f"✓ Document metadata saved to Supabase: {document_id}")
             else:
@@ -419,14 +353,13 @@ async def upload_pdf(
             error_message = str(e)
             print(f"✗ Failed to store metadata in Supabase: {error_message}")
             
-            # Provide more helpful error messages
             if "policy" in error_message.lower() or "permission" in error_message.lower():
                 error_message = (
                     "Database permission error. Please ensure RLS policies are set up correctly. "
                     "Run the fix_rls_for_upload.sql script in your Supabase SQL editor."
                 )
             
-            # Clean up: delete from vector database if Supabase fails
+            
             try:
                 vector_service.delete_document(document_id, user_id)
                 print(f"✓ Rolled back vector database entries for document {document_id}")
@@ -459,22 +392,28 @@ async def search_documents(
     request: SearchRequest,
     current_user = Depends(get_current_user)
 ):
-    """
-    Semantic search across user's documents
-    """
     if not vector_service:
         raise HTTPException(status_code=500, detail="Vector service not configured")
     
     try:
         user_id = current_user.user.id
         
-        # Perform semantic search
+        print(f"🔍 Search Request:")
+        print(f"   User ID: {user_id}")
+        print(f"   Query: '{request.query}'")
+        print(f"   Top K: {request.top_k or 5}")
+        print(f"   Min Score: {request.min_score or 0.3}")
+        
         results = vector_service.search_similar(
             query=request.query,
             user_id=user_id,
-            top_k=request.top_k or 5,
-            min_score=request.min_score or 0.5
+            top_k=request.top_k or 10,
+            min_score=request.min_score or 0.25
         )
+        
+        print(f"✓ Found {len(results)} results")
+        if results:
+            print(f"   Top match score: {results[0]['score']:.3f}")
         
         return {
             "query": request.query,
@@ -483,7 +422,9 @@ async def search_documents(
         }
         
     except Exception as e:
-        print(f"Error searching documents: {e}")
+        print(f"✗ Error searching documents: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 @app.delete("/documents/{document_id}")
@@ -492,13 +433,9 @@ async def delete_document(
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """
-    Delete a document and all its chunks from vector database
-    """
     if not vector_service:
         raise HTTPException(status_code=500, detail="Vector service not configured")
     
-    # Extract access token for user-authenticated Supabase client
     access_token = authorization.replace("Bearer ", "") if authorization else None
     if not access_token:
         raise HTTPException(status_code=401, detail="Access token required")
@@ -506,10 +443,8 @@ async def delete_document(
     try:
         user_id = current_user.user.id
         
-        # Delete from vector database
         result = vector_service.delete_document(document_id, user_id)
         
-        # Delete from Supabase using user-authenticated client
         if supabase:
             try:
                 user_supabase = get_user_supabase_client(access_token)
@@ -534,13 +469,9 @@ async def get_document(
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """
-    Get document metadata
-    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
-    # Extract access token for user-authenticated Supabase client
     access_token = authorization.replace("Bearer ", "") if authorization else None
     if not access_token:
         raise HTTPException(status_code=401, detail="Access token required")
@@ -566,9 +497,6 @@ async def get_document(
 
 @app.get("/vector-stats")
 async def get_vector_stats(current_user = Depends(get_current_user)):
-    """
-    Get statistics about the vector database
-    """
     if not vector_service:
         raise HTTPException(status_code=500, detail="Vector service not configured")
     
@@ -578,3 +506,33 @@ async def get_vector_stats(current_user = Depends(get_current_user)):
     except Exception as e:
         print(f"Error getting vector stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+@app.get("/debug/user-vectors")
+async def debug_user_vectors(current_user = Depends(get_current_user)):
+    if not vector_service:
+        raise HTTPException(status_code=500, detail="Vector service not configured")
+    
+    try:
+        user_id = current_user.user.id
+        
+        index_stats = vector_service.get_index_stats()
+        
+        test_results = vector_service.search_similar(
+            query="test education university course work experience",
+            user_id=user_id,
+            top_k=100,
+            min_score=0.0
+        )
+        
+        return {
+            "user_id": user_id,
+            "total_vectors_in_index": index_stats.get("total_vectors", 0),
+            "user_vectors_found": len(test_results),
+            "sample_results": test_results[:3] if test_results else [],
+            "message": "If user_vectors_found is 0, your documents weren't properly uploaded/embedded"
+        }
+    except Exception as e:
+        print(f"Error in debug endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Debug failed: {str(e)}")

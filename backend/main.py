@@ -37,10 +37,10 @@ pdf_processor = PDFProcessor()
 
 try:
     vector_service = VectorService(pinecone_api_key=PINECONE_API_KEY)
-    print("✓ Vector service initialized successfully")
+    print("[SUCCESS] Vector service initialized successfully")
 except Exception as e:
     vector_service = None
-    print(f"✗ Failed to initialize vector service: {e}")
+    print(f"[ERROR] Failed to initialize vector service: {e}")
 
 class SignUpRequest(BaseModel):
     email: EmailStr
@@ -255,11 +255,11 @@ async def get_user_documents(
         
         documents = user_supabase.table("documents").select("*").eq("user_id", user_id).order("uploaded_at", desc=True).execute()
         
-        print(f"✓ Retrieved {len(documents.data) if documents.data else 0} documents for user {user_id}")
+        print(f"[INFO] Retrieved {len(documents.data) if documents.data else 0} documents for user {user_id}")
         
         return documents.data
     except Exception as e:
-        print(f"✗ Error retrieving documents: {str(e)}")
+        print(f"[ERROR] Error retrieving documents: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/study-materials")
@@ -345,13 +345,13 @@ async def upload_pdf(
             result = user_supabase.table("documents").insert(doc_metadata).execute()
             
             if result.data and len(result.data) > 0:
-                print(f"✓ Document metadata saved to Supabase: {document_id}")
+                print(f"[SUCCESS] Document metadata saved to Supabase: {document_id}")
             else:
                 raise Exception("Insert returned no data - possible RLS policy issue")
                 
         except Exception as e:
             error_message = str(e)
-            print(f"✗ Failed to store metadata in Supabase: {error_message}")
+            print(f"[ERROR] Failed to store metadata in Supabase: {error_message}")
             
             if "policy" in error_message.lower() or "permission" in error_message.lower():
                 error_message = (
@@ -362,9 +362,9 @@ async def upload_pdf(
             
             try:
                 vector_service.delete_document(document_id, user_id)
-                print(f"✓ Rolled back vector database entries for document {document_id}")
+                print(f"[INFO] Rolled back vector database entries for document {document_id}")
             except Exception as cleanup_error:
-                print(f"✗ Failed to cleanup vector database: {cleanup_error}")
+                print(f"[ERROR] Failed to cleanup vector database: {cleanup_error}")
             
             raise HTTPException(
                 status_code=500,
@@ -398,7 +398,7 @@ async def search_documents(
     try:
         user_id = current_user.user.id
         
-        print(f"🔍 Search Request:")
+        print(f"[SEARCH] Search Request:")
         print(f"   User ID: {user_id}")
         print(f"   Query: '{request.query}'")
         print(f"   Top K: {request.top_k or 5}")
@@ -411,7 +411,7 @@ async def search_documents(
             min_score=request.min_score or 0.25
         )
         
-        print(f"✓ Found {len(results)} results")
+        print(f"[INFO] Found {len(results)} results")
         if results:
             print(f"   Top match score: {results[0]['score']:.3f}")
         
@@ -422,7 +422,7 @@ async def search_documents(
         }
         
     except Exception as e:
-        print(f"✗ Error searching documents: {e}")
+        print(f"[ERROR] Error searching documents: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
@@ -449,9 +449,9 @@ async def delete_document(
             try:
                 user_supabase = get_user_supabase_client(access_token)
                 user_supabase.table("documents").delete().eq("id", document_id).eq("user_id", user_id).execute()
-                print(f"✓ Document deleted from Supabase: {document_id}")
+                print(f"[SUCCESS] Document deleted from Supabase: {document_id}")
             except Exception as e:
-                print(f"Warning: Failed to delete from Supabase: {e}")
+                print(f"[WARNING] Failed to delete from Supabase: {e}")
         
         return {
             "success": result.get("success", False),

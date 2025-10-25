@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import { FileUp, Upload, CheckCircle, XCircle, FileText, BarChart3, FileType, X } from 'lucide-react';
 
 interface UploadResult {
   success: boolean;
@@ -142,27 +143,35 @@ export default function PDFUpload({ onUploadSuccess }: PDFUploadProps) {
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
-      <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
-        📄 Upload PDF Document
+      <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+        <FileUp className="w-6 h-6" />
+        Upload PDF Document
       </h2>
 
       {/* Success Message */}
       {uploadResult && (
         <div className="mb-4 p-4 bg-green-500/10 border border-green-500 rounded-lg">
           <div className="flex items-start">
-            <svg className="w-5 h-5 text-green-400 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
+            <CheckCircle className="w-5 h-5 text-green-400 mr-2 mt-0.5" />
             <div className="flex-1">
               <p className="text-green-400 font-semibold">Upload Successful!</p>
               <p className="text-green-300 text-sm mt-1">
                 <strong>{uploadResult.filename}</strong> has been processed
               </p>
               <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-green-200">
-                <div>📊 Chunks: {uploadResult.chunk_count}</div>
-                <div>📝 Characters: {uploadResult.character_count.toLocaleString()}</div>
+                <div className="flex items-center gap-1">
+                  <BarChart3 className="w-3 h-3" />
+                  Chunks: {uploadResult.chunk_count}
+                </div>
+                <div className="flex items-center gap-1">
+                  <FileType className="w-3 h-3" />
+                  Characters: {uploadResult.character_count.toLocaleString()}
+                </div>
                 {uploadResult.metadata?.page_count && (
-                  <div>📄 Pages: {uploadResult.metadata.page_count}</div>
+                  <div className="flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    Pages: {uploadResult.metadata.page_count}
+                  </div>
                 )}
               </div>
             </div>
@@ -174,9 +183,7 @@ export default function PDFUpload({ onUploadSuccess }: PDFUploadProps) {
       {error && (
         <div className="mb-4 p-4 bg-red-500/10 border border-red-500 rounded-lg">
           <div className="flex items-start">
-            <svg className="w-5 h-5 text-red-400 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
+            <XCircle className="w-5 h-5 text-red-400 mr-2 mt-0.5" />
             <div>
               <p className="text-red-400 font-semibold">Upload Failed</p>
               <p className="text-red-300 text-sm mt-1">{error}</p>
@@ -252,9 +259,7 @@ export default function PDFUpload({ onUploadSuccess }: PDFUploadProps) {
                 className="text-gray-400 hover:text-white p-2 rounded transition"
                 title="Remove file"
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
+                <X className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -284,9 +289,7 @@ export default function PDFUpload({ onUploadSuccess }: PDFUploadProps) {
               onClick={handleUpload}
               className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center space-x-2"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-              </svg>
+              <Upload className="w-5 h-5" />
               <span>Upload & Process Document</span>
             </button>
           )}

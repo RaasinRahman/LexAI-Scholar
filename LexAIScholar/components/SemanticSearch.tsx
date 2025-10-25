@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, SearchResult } from '@/lib/api';
+import { Search, Loader2, XCircle, FileText, User, Target, Sparkles, ThumbsUp, Pin, Copy, ExternalLink, Lightbulb, Info } from 'lucide-react';
 
 export default function SemanticSearch() {
   const { session } = useAuth();
@@ -27,7 +28,7 @@ export default function SemanticSearch() {
     const startTime = Date.now();
 
     try {
-      console.log('🔍 Searching for:', query);
+      console.log('[SEARCH] Searching for:', query);
       const response = await api.searchDocuments(
         query.trim(),
         session.access_token,
@@ -38,10 +39,10 @@ export default function SemanticSearch() {
       const endTime = Date.now();
       setSearchTime(endTime - startTime);
       
-      console.log('✓ Search results:', response);
+      console.log('[SUCCESS] Search results:', response);
       setResults(response.results);
     } catch (err: any) {
-      console.error('✗ Search error:', err);
+      console.error('[ERROR] Search error:', err);
       setError(err.message || 'Search failed');
       setResults([]);
     } finally {
@@ -77,22 +78,24 @@ export default function SemanticSearch() {
     return 'Relevant';
   };
 
-  const getRelevanceBadge = (score: number): { emoji: string; label: string; color: string } => {
-    if (score >= 0.7) return { emoji: '🎯', label: 'Highly Relevant', color: 'bg-green-500/20 text-green-300 border-green-500' };
-    if (score >= 0.5) return { emoji: '✨', label: 'Very Relevant', color: 'bg-blue-500/20 text-blue-300 border-blue-500' };
-    if (score >= 0.35) return { emoji: '👍', label: 'Relevant', color: 'bg-yellow-500/20 text-yellow-300 border-yellow-500' };
-    return { emoji: '📌', label: 'May be Relevant', color: 'bg-orange-500/20 text-orange-300 border-orange-500' };
+  const getRelevanceBadge = (score: number): { icon: React.ElementType; label: string; color: string } => {
+    if (score >= 0.7) return { icon: Target, label: 'Highly Relevant', color: 'bg-green-500/20 text-green-300 border-green-500' };
+    if (score >= 0.5) return { icon: Sparkles, label: 'Very Relevant', color: 'bg-blue-500/20 text-blue-300 border-blue-500' };
+    if (score >= 0.35) return { icon: ThumbsUp, label: 'Relevant', color: 'bg-yellow-500/20 text-yellow-300 border-yellow-500' };
+    return { icon: Pin, label: 'May be Relevant', color: 'bg-orange-500/20 text-orange-300 border-orange-500' };
   };
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
-      <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
-        🔍 Semantic Search
+      <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+        <Search className="w-6 h-6" />
+        Semantic Search
       </h2>
       
-      <p className="text-gray-300 text-sm mb-4">
-        🔍 <span className="font-semibold">Q&A Optimized Search</span> - Ask full questions in natural language. 
-        Uses specialized question-answer AI model (multi-qa-mpnet) for best results.
+      <p className="text-gray-300 text-sm mb-4 flex items-center gap-2">
+        <Info className="w-4 h-4 text-blue-400" />
+        <span><span className="font-semibold">Q&A Optimized Search</span> - Ask full questions in natural language. 
+        Uses specialized question-answer AI model (multi-qa-mpnet) for best results.</span>
       </p>
 
       {/* Search Form */}
@@ -107,19 +110,7 @@ export default function SemanticSearch() {
               className="w-full px-4 py-3 pl-10 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50"
               disabled={isSearching}
             />
-            <svg
-              className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
+            <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
           </div>
           <button
             type="submit"
@@ -128,17 +119,12 @@ export default function SemanticSearch() {
           >
             {isSearching ? (
               <>
-                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
+                <Loader2 className="animate-spin h-5 w-5" />
                 <span>Searching...</span>
               </>
             ) : (
               <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Search className="w-5 h-5" />
                 <span>Search</span>
               </>
             )}
@@ -150,9 +136,7 @@ export default function SemanticSearch() {
       {error && (
         <div className="mb-4 p-4 bg-red-500/10 border border-red-500 rounded-lg">
           <div className="flex items-start">
-            <svg className="w-5 h-5 text-red-400 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
+            <XCircle className="w-5 h-5 text-red-400 mr-2 mt-0.5" />
             <div>
               <p className="text-red-400 font-semibold">Search Failed</p>
               <p className="text-red-300 text-sm mt-1">{error}</p>
@@ -198,17 +182,26 @@ export default function SemanticSearch() {
                     </h3>
                     {(() => {
                       const badge = getRelevanceBadge(result.score);
+                      const IconComponent = badge.icon;
                       return (
                         <span className={`text-xs px-2 py-0.5 rounded border ${badge.color} flex items-center gap-1`}>
-                          <span>{badge.emoji}</span>
+                          <IconComponent className="w-3 h-3" />
                           <span>{badge.label}</span>
                         </span>
                       );
                     })()}
                   </div>
                   <div className="flex items-center space-x-3 text-xs text-gray-400">
-                    <span>📄 {result.filename}</span>
-                    {result.author && <span>✍️ {result.author}</span>}
+                    <span className="flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      {result.filename}
+                    </span>
+                    {result.author && (
+                      <span className="flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        {result.author}
+                      </span>
+                    )}
                     <span>Section #{result.chunk_id + 1}</span>
                   </div>
                 </div>
@@ -239,12 +232,14 @@ export default function SemanticSearch() {
                     // Copy text to clipboard
                     navigator.clipboard.writeText(result.text);
                   }}
-                  className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-slate-600/50 hover:bg-slate-600 transition"
+                  className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-slate-600/50 hover:bg-slate-600 transition flex items-center gap-1"
                 >
-                  📋 Copy
+                  <Copy className="w-3 h-3" />
+                  Copy
                 </button>
-                <button className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-slate-600/50 hover:bg-slate-600 transition">
-                  🔗 View Document
+                <button className="text-xs text-gray-400 hover:text-white px-3 py-1 rounded bg-slate-600/50 hover:bg-slate-600 transition flex items-center gap-1">
+                  <ExternalLink className="w-3 h-3" />
+                  View Document
                 </button>
               </div>
             </div>
@@ -259,7 +254,10 @@ export default function SemanticSearch() {
               Try adjusting your search query or upload more documents
             </p>
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-left max-w-2xl mx-auto">
-              <p className="text-blue-400 font-semibold text-sm mb-3">💡 Search Tips for Better Results:</p>
+              <p className="text-blue-400 font-semibold text-sm mb-3 flex items-center gap-2">
+                <Lightbulb className="w-4 h-4" />
+                Search Tips for Better Results:
+              </p>
               <ul className="text-gray-400 text-xs space-y-2 list-disc list-inside">
                 <li><span className="font-semibold text-gray-300">Be specific but natural:</span> Ask questions like "What are the main findings?" instead of just "findings"</li>
                 <li><span className="font-semibold text-gray-300">Use complete questions:</span> "What courses did I take?" works better than "courses"</li>

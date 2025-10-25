@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { api, Document } from '@/lib/api';
+import { Library, RefreshCw, FileText, User, FileStack, FileType, Calendar, Trash2, Loader2 } from 'lucide-react';
 
 interface DocumentLibraryProps {
   onRefresh?: boolean;
@@ -73,14 +74,12 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
   if (isLoading) {
     return (
       <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
-        <h2 className="text-2xl font-bold text-white mb-4 flex items-center">
-          📚 Document Library
+        <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+          <Library className="w-6 h-6" />
+          Document Library
         </h2>
         <div className="flex items-center justify-center py-12">
-          <svg className="animate-spin h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
+          <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
           <span className="ml-3 text-gray-300">Loading documents...</span>
         </div>
       </div>
@@ -90,17 +89,16 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-white flex items-center">
-          📚 Document Library
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+          <Library className="w-6 h-6" />
+          Document Library
         </h2>
         <button
           onClick={loadDocuments}
           className="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-slate-700 transition"
           title="Refresh"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
+          <RefreshCw className="w-5 h-5" />
         </button>
       </div>
 
@@ -145,20 +143,34 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
                         {doc.title || doc.filename}
                       </h3>
                       {doc.title && doc.title !== doc.filename && (
-                        <p className="text-gray-400 text-sm mb-1 truncate">
-                          📄 {doc.filename}
+                        <p className="text-gray-400 text-sm mb-1 truncate flex items-center gap-1">
+                          <FileText className="w-3 h-3" />
+                          {doc.filename}
                         </p>
                       )}
                       {doc.author && (
-                        <p className="text-gray-400 text-sm mb-1">
-                          ✍️ {doc.author}
+                        <p className="text-gray-400 text-sm mb-1 flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          {doc.author}
                         </p>
                       )}
                       <div className="flex flex-wrap gap-3 text-xs text-gray-400 mt-2">
-                        <span>📄 {doc.page_count} page{doc.page_count !== 1 ? 's' : ''}</span>
-                        <span>📊 {doc.chunk_count} chunk{doc.chunk_count !== 1 ? 's' : ''}</span>
-                        <span>📝 {doc.character_count.toLocaleString()} chars</span>
-                        <span>📅 {formatDate(doc.uploaded_at)}</span>
+                        <span className="flex items-center gap-1">
+                          <FileText className="w-3 h-3" />
+                          {doc.page_count} page{doc.page_count !== 1 ? 's' : ''}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FileStack className="w-3 h-3" />
+                          {doc.chunk_count} chunk{doc.chunk_count !== 1 ? 's' : ''}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FileType className="w-3 h-3" />
+                          {doc.character_count.toLocaleString()} chars
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(doc.uploaded_at)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -172,14 +184,9 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
                       title="Delete document"
                     >
                       {deletingId === doc.id ? (
-                        <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
+                        <Loader2 className="animate-spin h-5 w-5" />
                       ) : (
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
+                        <Trash2 className="w-5 h-5" />
                       )}
                     </button>
                   </div>

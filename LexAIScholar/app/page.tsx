@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthModal from '@/components/auth/AuthModal';
 import UserDashboard from '@/components/UserDashboard';
+import { Scale, FileText, Bot, Library, Search, Lightbulb, Target } from 'lucide-react';
 
 export default function Home() {
   const { user, signOut, loading } = useAuth();
@@ -25,8 +26,9 @@ export default function Home() {
         <nav className="bg-slate-800/50 backdrop-blur-sm border-b border-slate-700">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <h1 className="text-2xl font-bold text-white">⚖️ LexAI Scholar</h1>
+              <div className="flex items-center gap-2">
+                <Scale className="w-6 h-6 text-blue-400" />
+                <h1 className="text-2xl font-bold text-white">LexAI Scholar</h1>
               </div>
               <div className="flex items-center space-x-4">
                 <span className="text-gray-300 text-sm font-medium">
@@ -53,8 +55,9 @@ export default function Home() {
       <nav className="bg-slate-800/50 backdrop-blur-sm border-b border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-white">⚖️ LexAI Scholar</h1>
+            <div className="flex items-center gap-2">
+              <Scale className="w-6 h-6 text-blue-400" />
+              <h1 className="text-2xl font-bold text-white">LexAI Scholar</h1>
             </div>
             <div className="flex items-center space-x-4">
               <button className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
@@ -132,7 +135,7 @@ export default function Home() {
         {/* Features Grid */}
         <div className="grid md:grid-cols-3 gap-8 mt-20">
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6 hover:border-blue-500 transition duration-200">
-            <div className="text-4xl mb-4">📄</div>
+            <FileText className="w-12 h-12 text-blue-400 mb-4" />
             <h3 className="text-xl font-bold text-white mb-3">Document Upload</h3>
             <p className="text-gray-300">
               Upload and manage your legal documents securely. Support for PDF, DOCX, and more.
@@ -140,7 +143,7 @@ export default function Home() {
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6 hover:border-blue-500 transition duration-200">
-            <div className="text-4xl mb-4">🤖</div>
+            <Bot className="w-12 h-12 text-purple-400 mb-4" />
             <h3 className="text-xl font-bold text-white mb-3">AI Analysis</h3>
             <p className="text-gray-300">
               Leverage cutting-edge AI to extract key legal concepts, precedents, and insights.
@@ -148,7 +151,7 @@ export default function Home() {
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6 hover:border-blue-500 transition duration-200">
-            <div className="text-4xl mb-4">📚</div>
+            <Library className="w-12 h-12 text-green-400 mb-4" />
             <h3 className="text-xl font-bold text-white mb-3">Study Tools</h3>
             <p className="text-gray-300">
               Create summaries, flashcards, and study guides automatically from your documents.
@@ -156,7 +159,7 @@ export default function Home() {
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6 hover:border-blue-500 transition duration-200">
-            <div className="text-4xl mb-4">🔍</div>
+            <Search className="w-12 h-12 text-cyan-400 mb-4" />
             <h3 className="text-xl font-bold text-white mb-3">Smart Search</h3>
             <p className="text-gray-300">
               Find relevant cases, statutes, and legal principles with intelligent search.
@@ -164,7 +167,7 @@ export default function Home() {
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6 hover:border-blue-500 transition duration-200">
-            <div className="text-4xl mb-4">💡</div>
+            <Lightbulb className="w-12 h-12 text-yellow-400 mb-4" />
             <h3 className="text-xl font-bold text-white mb-3">Case Briefs</h3>
             <p className="text-gray-300">
               Generate comprehensive case briefs with AI-powered analysis of facts and holdings.
@@ -172,7 +175,7 @@ export default function Home() {
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6 hover:border-blue-500 transition duration-200">
-            <div className="text-4xl mb-4">🎯</div>
+            <Target className="w-12 h-12 text-red-400 mb-4" />
             <h3 className="text-xl font-bold text-white mb-3">Practice Questions</h3>
             <p className="text-gray-300">
               Test your knowledge with AI-generated practice questions based on your materials.

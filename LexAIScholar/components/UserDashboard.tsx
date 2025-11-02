@@ -5,12 +5,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import PDFUpload from './PDFUpload';
 import SemanticSearch from './SemanticSearch';
 import DocumentLibrary from './DocumentLibrary';
-import { Upload, Search, Library, Target, Zap, Lock, Lightbulb, Hand } from 'lucide-react';
+import AIChat from './AIChat';
+import { Upload, Search, Library, Target, Zap, Lock, Lightbulb, Hand, MessageSquare } from 'lucide-react';
 
 export default function UserDashboard() {
   const { user } = useAuth();
   const [refreshDocuments, setRefreshDocuments] = useState(false);
-  const [activeTab, setActiveTab] = useState<'upload' | 'search' | 'library'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'search' | 'chat' | 'library'>('chat');
 
   const fullName = user?.user_metadata?.full_name || 'User';
 
@@ -31,22 +32,22 @@ export default function UserDashboard() {
             <Hand className="w-10 h-10 text-yellow-400" />
           </h1>
           <p className="text-gray-300 text-lg">
-            Welcome to your LexAI Scholar dashboard. Upload PDFs and search with AI-powered semantic search.
+            Welcome to your LexAI Scholar dashboard. Upload PDFs, chat with AI, and search with semantic intelligence.
           </p>
         </div>
 
         {/* Tab Navigation */}
         <div className="mb-6 flex space-x-2 border-b border-slate-700">
           <button
-            onClick={() => setActiveTab('upload')}
+            onClick={() => setActiveTab('chat')}
             className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'upload'
+              activeTab === 'chat'
                 ? 'text-blue-400 border-b-2 border-blue-400'
                 : 'text-gray-400 hover:text-white'
             }`}
           >
-            <Upload className="w-4 h-4" />
-            Upload
+            <MessageSquare className="w-4 h-4" />
+            AI Chat
           </button>
           <button
             onClick={() => setActiveTab('search')}
@@ -58,6 +59,17 @@ export default function UserDashboard() {
           >
             <Search className="w-4 h-4" />
             Search
+          </button>
+          <button
+            onClick={() => setActiveTab('upload')}
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 ${
+              activeTab === 'upload'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            Upload
           </button>
           <button
             onClick={() => setActiveTab('library')}
@@ -74,6 +86,38 @@ export default function UserDashboard() {
 
         {/* Tab Content */}
         <div className="space-y-6">
+          {activeTab === 'chat' && (
+            <>
+              <AIChat />
+              
+              {/* Chat Info */}
+              <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-blue-400" />
+                  AI Chat Features
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-white font-medium mb-1">Q&A Mode</p>
+                    <p className="text-gray-400">Get direct answers to questions with citations</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Conversational</p>
+                    <p className="text-gray-400">Natural multi-turn conversations with context</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Summary Mode</p>
+                    <p className="text-gray-400">Summarize relevant sections from your docs</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Comparative</p>
+                    <p className="text-gray-400">Compare information across documents</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
           {activeTab === 'upload' && (
             <>
               <PDFUpload onUploadSuccess={handleUploadSuccess} />

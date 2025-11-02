@@ -6,14 +6,14 @@ echo "📦 Checking virtual environment..."
 
 cd backend
 
-# Check if venv exists, create if not
+
 if [ ! -d ".venv" ]; then
     echo "⚠️  Creating virtual environment..."
     python3 -m venv .venv
     .venv/bin/pip install -r requirements.txt
 fi
 
-# Check if requirements are installed
+
 if ! .venv/bin/python -c "import fastapi" 2>/dev/null; then
     echo "⚠️  Installing Python dependencies..."
     .venv/bin/pip install -r requirements.txt

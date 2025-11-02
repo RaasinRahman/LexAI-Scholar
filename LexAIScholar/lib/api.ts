@@ -28,6 +28,42 @@ export interface SearchResponse {
   count: number;
 }
 
+export interface Citation {
+  source_number: number;
+  document_id: string;
+  filename: string;
+  title?: string;
+  author?: string;
+  chunk_id: number;
+  text_preview: string;
+  relevance_score: number;
+}
+
+export interface RAGResponse {
+  success: boolean;
+  answer: string;
+  citations: Citation[];
+  sources_found: number;
+  context_chunks_used: number;
+  followup_questions: string[];
+  model: string;
+  mode: string;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  timestamp: string;
+  query: string;
+}
+
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+  citations?: Citation[];
+}
+
 class APIClient {
   private getAuthHeaders(token?: string): HeadersInit {
     const headers: HeadersInit = {
@@ -163,6 +199,40 @@ class APIClient {
     
     if (!response.ok) {
       throw new Error('Health check failed');
+    }
+
+    return response.json();
+  }
+
+  async askQuestion(
+    query: string,
+    token: string,
+    mode: string = 'qa',
+    conversationHistory?: ConversationMessage[],
+    options?: {
+      top_k?: number;
+      min_score?: number;
+      temperature?: number;
+      max_tokens?: number;
+    }
+  ): Promise<RAGResponse> {
+    const response = await fetch(`${API_BASE_URL}/chat/ask`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify({
+        query,
+        mode,
+        conversation_history: conversationHistory,
+        top_k: options?.top_k || 5,
+        min_score: options?.min_score || 0.3,
+        temperature: options?.temperature || 0.3,
+        max_tokens: options?.max_tokens || 1000,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to get answer');
     }
 
     return response.json();

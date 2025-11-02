@@ -4,12 +4,13 @@ from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
 
 from pdf_service import PDFProcessor
 from vector_service import VectorService
+from rag_service import RAGService
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ app.add_middleware(
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "pcsk_6uGvNp_3XAvNGrsf3LKYPzKq42ovqnHatj3J4RJzdx6xhmawsj9jza7K1nskPxsEQrDkfo")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if SUPABASE_URL and SUPABASE_KEY:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -41,6 +43,17 @@ try:
 except Exception as e:
     vector_service = None
     print(f"[ERROR] Failed to initialize vector service: {e}")
+
+try:
+    if OPENAI_API_KEY:
+        rag_service = RAGService(openai_api_key=OPENAI_API_KEY)
+        print("[SUCCESS] RAG service initialized successfully")
+    else:
+        rag_service = None
+        print("[WARNING] OpenAI API key not found. RAG features will be disabled.")
+except Exception as e:
+    rag_service = None
+    print(f"[ERROR] Failed to initialize RAG service: {e}")
 
 class SignUpRequest(BaseModel):
     email: EmailStr
@@ -67,6 +80,21 @@ class SearchRequest(BaseModel):
     query: str
     top_k: Optional[int] = 10
     min_score: Optional[float] = 0.25
+
+class RAGQueryRequest(BaseModel):
+    query: str
+    mode: Optional[str] = "qa"  # qa, summary, comparative, conversational
+    top_k: Optional[int] = 5
+    min_score: Optional[float] = 0.3
+    conversation_history: Optional[List[Dict[str, str]]] = None
+    temperature: Optional[float] = 0.3
+    max_tokens: Optional[int] = 1000
+
+class ConversationMessage(BaseModel):
+    role: str
+    content: str
+    timestamp: Optional[str] = None
+    citations: Optional[List[Dict[str, Any]]] = None
 
 class DocumentResponse(BaseModel):
     document_id: str
@@ -426,6 +454,90 @@ async def search_documents(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+@app.post("/chat/ask")
+async def ask_question_rag(
+    request: RAGQueryRequest,
+    current_user = Depends(get_current_user)
+):
+    """
+    RAG endpoint: Retrieve relevant context and generate AI answer with citations
+    Supports multiple modes: qa, summary, comparative, conversational
+    """
+    if not vector_service:
+        raise HTTPException(status_code=500, detail="Vector service not configured")
+    
+    if not rag_service:
+        raise HTTPException(status_code=503, detail="RAG service not available. OpenAI API key not configured.")
+    
+    try:
+        user_id = current_user.user.id
+        
+        print(f"[RAG] Processing query: '{request.query}'")
+        print(f"[RAG] Mode: {request.mode}, User: {user_id}")
+        
+        # Step 1: Retrieve relevant context using vector search
+        search_results = vector_service.search_similar(
+            query=request.query,
+            user_id=user_id,
+            top_k=request.top_k or 5,
+            min_score=request.min_score or 0.3
+        )
+        
+        if not search_results:
+            return {
+                "success": True,
+                "answer": "I couldn't find relevant information in your documents to answer this question. Please try uploading more documents or rephrasing your query.",
+                "citations": [],
+                "sources_found": 0,
+                "query": request.query
+            }
+        
+        print(f"[RAG] Found {len(search_results)} relevant chunks")
+        
+        # Step 2: Generate answer with LLM using retrieved context
+        rag_result = rag_service.generate_answer(
+            query=request.query,
+            context_chunks=search_results,
+            mode=request.mode or "qa",
+            conversation_history=request.conversation_history,
+            temperature=request.temperature or 0.3,
+            max_tokens=request.max_tokens or 1000
+        )
+        
+        # Step 3: Generate follow-up questions
+        followup_questions = []
+        if rag_result.get("success"):
+            try:
+                followup_questions = rag_service.generate_followup_questions(
+                    request.query,
+                    rag_result.get("answer", ""),
+                    search_results
+                )
+            except Exception as e:
+                print(f"[RAG] Could not generate follow-ups: {e}")
+        
+        print(f"[RAG] Response generated successfully")
+        
+        return {
+            "success": rag_result.get("success", False),
+            "answer": rag_result.get("answer", ""),
+            "citations": rag_result.get("citations", []),
+            "sources_found": len(search_results),
+            "context_chunks_used": rag_result.get("context_chunks_used", 0),
+            "followup_questions": followup_questions,
+            "model": rag_result.get("model"),
+            "mode": request.mode,
+            "usage": rag_result.get("usage", {}),
+            "timestamp": rag_result.get("timestamp"),
+            "query": request.query
+        }
+        
+    except Exception as e:
+        print(f"[RAG] Error in RAG endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"RAG processing failed: {str(e)}")
 
 @app.delete("/documents/{document_id}")
 async def delete_document(

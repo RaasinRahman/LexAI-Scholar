@@ -13,6 +13,9 @@ python-multipart==0.0.9
 pinecone>=5.0.0
 sentence-transformers>=2.7.0
 
+# RAG & LLM
+openai>=1.12.0
+
 # Additional utilities
 tiktoken>=0.7.0
 numpy>=1.26.0

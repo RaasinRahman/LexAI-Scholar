@@ -235,6 +235,54 @@ class VectorService:
             traceback.print_exc()
             raise
     
+    def search_by_filter(
+        self,
+        filter_dict: Dict[str, Any],
+        top_k: int = 10000
+    ) -> Dict[str, Any]:
+        """
+        Query Pinecone by filter only (no semantic search).
+        Useful for retrieving all chunks of a specific document.
+        """
+        try:
+            # Create a dummy embedding (we won't use it for filtering)
+            dummy_embedding = [0.0] * self.embedding_dimension
+            
+            # Build filter
+            pinecone_filter = {}
+            for key, value in filter_dict.items():
+                pinecone_filter[key] = {"$eq": value}
+            
+            results = self.index.query(
+                vector=dummy_embedding,
+                top_k=top_k,
+                include_metadata=True,
+                filter=pinecone_filter
+            )
+            
+            matches = []
+            for match in results.matches:
+                matches.append({
+                    "id": match.id,
+                    "score": float(match.score),
+                    "metadata": {
+                        "text": match.metadata.get("text", ""),
+                        "chunk_id": match.metadata.get("chunk_id", 0),
+                        "start_char": match.metadata.get("start_char", 0),
+                        "end_char": match.metadata.get("end_char", 0),
+                        "filename": match.metadata.get("filename", ""),
+                        "title": match.metadata.get("title", ""),
+                        "author": match.metadata.get("author", ""),
+                        "document_id": match.metadata.get("document_id", "")
+                    }
+                })
+            
+            return {"success": True, "matches": matches}
+            
+        except Exception as e:
+            print(f"Error searching by filter: {e}")
+            return {"success": False, "error": str(e), "matches": []}
+    
     def delete_document(self, document_id: str, user_id: str) -> Dict[str, Any]:
         try:
             self.index.delete(

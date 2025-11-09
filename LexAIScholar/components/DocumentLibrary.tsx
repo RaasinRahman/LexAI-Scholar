@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { api, Document } from '@/lib/api';
-import { Library, RefreshCw, FileText, User, FileStack, FileType, Calendar, Trash2, Loader2 } from 'lucide-react';
+import DocumentViewer from './DocumentViewer';
+import { Library, RefreshCw, FileText, User, FileStack, FileType, Calendar, Trash2, Loader2, Share2, X, ExternalLink } from 'lucide-react';
 
 interface DocumentLibraryProps {
   onRefresh?: boolean;
@@ -11,10 +13,15 @@ interface DocumentLibraryProps {
 
 export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
   const { session } = useAuth();
+  const { workspaces } = useWorkspace();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [sharingDocId, setSharingDocId] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedWorkspace, setSelectedWorkspace] = useState<string>('');
+  const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
 
   const loadDocuments = async () => {
     if (!session?.access_token) return;
@@ -55,6 +62,25 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
     }
   };
 
+  const handleShareDocument = async () => {
+    if (!session?.access_token || !sharingDocId || !selectedWorkspace) return;
+
+    try {
+      await api.shareDocumentWithWorkspace(
+        selectedWorkspace,
+        sharingDocId,
+        session.access_token
+      );
+      
+      alert('Document shared successfully!');
+      setShowShareModal(false);
+      setSharingDocId(null);
+      setSelectedWorkspace('');
+    } catch (err: any) {
+      alert(`Failed to share document: ${err.message}`);
+    }
+  };
+
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -70,6 +96,16 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
     const mb = bytes / (1024 * 1024);
     return `${mb.toFixed(2)} MB`;
   };
+
+  // Show document viewer if a document is selected
+  if (viewingDocumentId) {
+    return (
+      <DocumentViewer
+        documentId={viewingDocumentId}
+        onClose={() => setViewingDocumentId(null)}
+      />
+    );
+  }
 
   if (isLoading) {
     return (
@@ -178,6 +214,26 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
                   {/* Actions */}
                   <div className="flex items-center space-x-2 ml-4">
                     <button
+                      onClick={() => setViewingDocumentId(doc.id)}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
+                      title="Open document"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Open
+                    </button>
+                    {workspaces.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setSharingDocId(doc.id);
+                          setShowShareModal(true);
+                        }}
+                        className="text-blue-400 hover:text-blue-300 p-2 rounded-lg hover:bg-blue-500/10 transition"
+                        title="Share with workspace"
+                      >
+                        <Share2 className="w-5 h-5" />
+                      </button>
+                    )}
+                    <button
                       onClick={() => handleDelete(doc.id)}
                       disabled={deletingId === doc.id}
                       className="text-red-400 hover:text-red-300 p-2 rounded-lg hover:bg-red-500/10 transition disabled:opacity-50"
@@ -195,6 +251,65 @@ export default function DocumentLibrary({ onRefresh }: DocumentLibraryProps) {
             ))}
           </div>
         </>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white">Share Document</h3>
+              <button
+                onClick={() => {
+                  setShowShareModal(false);
+                  setSharingDocId(null);
+                  setSelectedWorkspace('');
+                }}
+                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Select Workspace
+                </label>
+                <select
+                  value={selectedWorkspace}
+                  onChange={(e) => setSelectedWorkspace(e.target.value)}
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Choose a workspace...</option>
+                  {workspaces.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>
+                      {workspace.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleShareDocument}
+                  disabled={!selectedWorkspace}
+                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium"
+                >
+                  Share
+                </button>
+                <button
+                  onClick={() => {
+                    setShowShareModal(false);
+                    setSharingDocId(null);
+                    setSelectedWorkspace('');
+                  }}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

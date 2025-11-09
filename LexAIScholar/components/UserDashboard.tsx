@@ -2,16 +2,21 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import PDFUpload from './PDFUpload';
 import SemanticSearch from './SemanticSearch';
 import DocumentLibrary from './DocumentLibrary';
 import AIChat from './AIChat';
-import { Upload, Search, Library, Target, Zap, Lock, Lightbulb, Hand, MessageSquare } from 'lucide-react';
+import CaseBrief from './CaseBrief';
+import Workspace from './Workspace';
+import WorkspaceSelector from './WorkspaceSelector';
+import { Upload, Search, Library, Target, Zap, Lock, Lightbulb, Hand, MessageSquare, Scale, Users } from 'lucide-react';
 
 export default function UserDashboard() {
   const { user } = useAuth();
+  const { currentWorkspace } = useWorkspace();
   const [refreshDocuments, setRefreshDocuments] = useState(false);
-  const [activeTab, setActiveTab] = useState<'upload' | 'search' | 'chat' | 'library'>('chat');
+  const [activeTab, setActiveTab] = useState<'upload' | 'search' | 'chat' | 'library' | 'casebrief' | 'workspace'>('chat');
 
   const fullName = user?.user_metadata?.full_name || 'User';
 
@@ -27,20 +32,53 @@ export default function UserDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
-            Hello, {fullName}!
-            <Hand className="w-10 h-10 text-yellow-400" />
-          </h1>
-          <p className="text-gray-300 text-lg">
-            Welcome to your LexAI Scholar dashboard. Upload PDFs, chat with AI, and search with semantic intelligence.
-          </p>
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1">
+              <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
+                Hello, {fullName}!
+                <Hand className="w-10 h-10 text-yellow-400" />
+              </h1>
+              <p className="text-gray-300 text-lg">
+                Welcome to your LexAI Scholar dashboard. Upload PDFs, chat with AI, and collaborate with your team.
+              </p>
+              {/* User ID Display */}
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-sm text-gray-400">Your User ID:</span>
+                <code className="px-2 py-1 bg-slate-800 text-blue-400 rounded text-xs font-mono">
+                  {user?.id}
+                </code>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(user?.id || '');
+                    alert('User ID copied to clipboard!');
+                  }}
+                  className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
+                  title="Copy User ID"
+                >
+                  Copy
+                </button>
+                <span className="text-xs text-gray-500">(Share this to be invited to workspaces)</span>
+              </div>
+            </div>
+            <div className="w-72 ml-4">
+              <WorkspaceSelector />
+            </div>
+          </div>
+          {currentWorkspace && (
+            <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-3 mt-4">
+              <p className="text-blue-200 text-sm flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                You're now in the <strong>{currentWorkspace.name}</strong> workspace
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Tab Navigation */}
-        <div className="mb-6 flex space-x-2 border-b border-slate-700">
+        <div className="mb-6 flex space-x-2 border-b border-slate-700 overflow-x-auto">
           <button
             onClick={() => setActiveTab('chat')}
-            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 ${
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'chat'
                 ? 'text-blue-400 border-b-2 border-blue-400'
                 : 'text-gray-400 hover:text-white'
@@ -50,8 +88,32 @@ export default function UserDashboard() {
             AI Chat
           </button>
           <button
+            onClick={() => setActiveTab('casebrief')}
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'casebrief'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Scale className="w-4 h-4" />
+            Case Briefs
+          </button>
+          {currentWorkspace && (
+            <button
+              onClick={() => setActiveTab('workspace')}
+              className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'workspace'
+                  ? 'text-blue-400 border-b-2 border-blue-400'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Workspace
+            </button>
+          )}
+          <button
             onClick={() => setActiveTab('search')}
-            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 ${
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'search'
                 ? 'text-blue-400 border-b-2 border-blue-400'
                 : 'text-gray-400 hover:text-white'
@@ -62,7 +124,7 @@ export default function UserDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('upload')}
-            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 ${
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'upload'
                 ? 'text-blue-400 border-b-2 border-blue-400'
                 : 'text-gray-400 hover:text-white'
@@ -73,7 +135,7 @@ export default function UserDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('library')}
-            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 ${
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'library'
                 ? 'text-blue-400 border-b-2 border-blue-400'
                 : 'text-gray-400 hover:text-white'
@@ -186,6 +248,70 @@ export default function UserDashboard() {
 
           {activeTab === 'library' && (
             <DocumentLibrary onRefresh={refreshDocuments} />
+          )}
+
+          {activeTab === 'casebrief' && (
+            <>
+              <CaseBrief />
+              
+              {/* Case Brief Info */}
+              <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <Scale className="w-5 h-5 text-purple-400" />
+                  Case Brief Features
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-white font-medium mb-1">Full Brief Generation</p>
+                    <p className="text-gray-400">Comprehensive briefs with facts, issues, holdings, reasoning, and more</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Quick Summaries</p>
+                    <p className="text-gray-400">Get concise 2-3 paragraph case summaries instantly</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Case Comparison</p>
+                    <p className="text-gray-400">Compare multiple cases to identify similarities and differences</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Export & Share</p>
+                    <p className="text-gray-400">Download briefs as text files or copy to clipboard</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'workspace' && currentWorkspace && (
+            <>
+              <Workspace />
+              
+              {/* Workspace Info */}
+              <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-green-400" />
+                  Collaborative Features
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-white font-medium mb-1">Team Document Sharing</p>
+                    <p className="text-gray-400">Share documents with workspace members and collaborate in real-time</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Comments & Annotations</p>
+                    <p className="text-gray-400">Add comments to documents and discuss with your team</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Role-Based Access</p>
+                    <p className="text-gray-400">Control permissions with owner, admin, editor, and viewer roles</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Activity Feed</p>
+                    <p className="text-gray-400">Stay updated with workspace activity and team member actions</p>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
 

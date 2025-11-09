@@ -11,6 +11,8 @@ import uuid
 from pdf_service import PDFProcessor
 from vector_service import VectorService
 from rag_service import RAGService
+from case_brief_service import CaseBriefService
+from workspace_service import WorkspaceService, WorkspaceRole
 
 load_dotenv()
 
@@ -55,6 +57,28 @@ except Exception as e:
     rag_service = None
     print(f"[ERROR] Failed to initialize RAG service: {e}")
 
+try:
+    if OPENAI_API_KEY:
+        case_brief_service = CaseBriefService(openai_api_key=OPENAI_API_KEY)
+        print("[SUCCESS] Case Brief service initialized successfully")
+    else:
+        case_brief_service = None
+        print("[WARNING] OpenAI API key not found. Case Brief features will be disabled.")
+except Exception as e:
+    case_brief_service = None
+    print(f"[ERROR] Failed to initialize Case Brief service: {e}")
+
+try:
+    if supabase:
+        workspace_service = WorkspaceService(supabase_client=supabase)
+        print("[SUCCESS] Workspace service initialized successfully")
+    else:
+        workspace_service = None
+        print("[WARNING] Supabase not configured. Workspace features will be disabled.")
+except Exception as e:
+    workspace_service = None
+    print(f"[ERROR] Failed to initialize Workspace service: {e}")
+
 class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
@@ -90,11 +114,56 @@ class RAGQueryRequest(BaseModel):
     temperature: Optional[float] = 0.3
     max_tokens: Optional[int] = 1000
 
+class CaseBriefRequest(BaseModel):
+    document_id: str
+    brief_type: Optional[str] = "full"  # full or summary
+    temperature: Optional[float] = 0.2
+    max_tokens: Optional[int] = 2500
+
+class CaseBriefCompareRequest(BaseModel):
+    document_ids: List[str]
+    comparison_focus: Optional[str] = None
+    temperature: Optional[float] = 0.3
+    max_tokens: Optional[int] = 1500
+
 class ConversationMessage(BaseModel):
     role: str
     content: str
     timestamp: Optional[str] = None
     citations: Optional[List[Dict[str, Any]]] = None
+
+class CreateWorkspaceRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
+
+class UpdateWorkspaceRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
+
+class AddMemberRequest(BaseModel):
+    user_id: str
+    role: str  # owner, admin, editor, viewer
+
+class InviteMemberByEmailRequest(BaseModel):
+    email: EmailStr
+    role: str  # owner, admin, editor, viewer
+
+class UpdateMemberRoleRequest(BaseModel):
+    user_id: str
+    role: str
+
+class ShareDocumentRequest(BaseModel):
+    workspace_id: str
+    document_id: str
+    permissions: Optional[Dict[str, bool]] = None
+
+class AddCommentRequest(BaseModel):
+    workspace_id: str
+    document_id: str
+    content: str
+    context: Optional[Dict[str, Any]] = None
 
 class DocumentResponse(BaseModel):
     document_id: str
@@ -105,6 +174,20 @@ class DocumentResponse(BaseModel):
     chunk_count: int
     character_count: int
     uploaded_at: str
+
+class CreateAnnotationRequest(BaseModel):
+    workspace_id: Optional[str] = None
+    document_id: str
+    annotation_type: str  # highlight, note, comment
+    start_pos: int
+    end_pos: int
+    text_content: str
+    note_content: Optional[str] = None
+    color: Optional[str] = "#ffeb3b"  # Default yellow
+
+class UpdateAnnotationRequest(BaseModel):
+    note_content: Optional[str] = None
+    color: Optional[str] = None
 
 def get_user_supabase_client(access_token: str) -> Client:
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -607,6 +690,245 @@ async def get_document(
         print(f"Error getting document: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get document: {str(e)}")
 
+@app.get("/documents/{document_id}/content")
+async def get_document_content(
+    document_id: str,
+    current_user = Depends(get_current_user),
+    authorization: str = Header(None)
+):
+    """
+    Retrieve the full text content of a document, reconstructed from chunks in order.
+    """
+    if not vector_service:
+        raise HTTPException(status_code=500, detail="Vector service not configured")
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_id = current_user.user.id
+        user_supabase = get_user_supabase_client(access_token)
+        
+        # Try to get document - RLS will handle access control
+        # The RLS policy allows access if user owns it OR if it's shared via workspace
+        doc_result = user_supabase.table("documents").select("*").eq("id", document_id).execute()
+        
+        if not doc_result.data or len(doc_result.data) == 0:
+            # Document not found or user doesn't have access (blocked by RLS)
+            raise HTTPException(status_code=404, detail="Document not found or access denied")
+        
+        document = doc_result.data[0]
+        
+        # Query vector store for all chunks of this document
+        query_results = vector_service.search_by_filter(
+            filter_dict={"document_id": document_id},
+            top_k=10000  # Get all chunks
+        )
+        
+        # Sort chunks by chunk_id to maintain order
+        sorted_chunks = sorted(query_results.get("matches", []), key=lambda x: x.get("metadata", {}).get("chunk_id", 0))
+        
+        # Reconstruct full text
+        full_text_parts = []
+        chunks_data = []
+        
+        for match in sorted_chunks:
+            metadata = match.get("metadata", {})
+            chunk_text = metadata.get("text", "")
+            
+            chunks_data.append({
+                "chunk_id": metadata.get("chunk_id", 0),
+                "text": chunk_text,
+                "start_char": metadata.get("start_char", 0),
+                "end_char": metadata.get("end_char", 0),
+            })
+            
+            full_text_parts.append(chunk_text)
+        
+        full_text = "\n\n".join(full_text_parts)
+        
+        return {
+            "success": True,
+            "document_id": document_id,
+            "document_name": document.get("filename", ""),
+            "title": document.get("title"),
+            "author": document.get("author"),
+            "full_text": full_text,
+            "chunks": chunks_data,
+            "total_chunks": len(chunks_data),
+            "character_count": len(full_text)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting document content: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get document content: {str(e)}")
+
+@app.post("/documents/{document_id}/annotations")
+async def create_annotation(
+    document_id: str,
+    request: CreateAnnotationRequest,
+    current_user = Depends(get_current_user),
+    authorization: str = Header(None)
+):
+    """
+    Create an annotation (highlight, note, or comment) on a document.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_id = current_user.user.id
+        user_supabase = get_user_supabase_client(access_token)
+        
+        annotation_id = str(uuid.uuid4())
+        
+        annotation_data = {
+            "id": annotation_id,
+            "document_id": document_id,
+            "workspace_id": request.workspace_id,
+            "user_id": user_id,
+            "annotation_type": request.annotation_type,
+            "start_pos": request.start_pos,
+            "end_pos": request.end_pos,
+            "text_content": request.text_content,
+            "note_content": request.note_content,
+            "color": request.color,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        result = user_supabase.table("document_annotations").insert(annotation_data).execute()
+        
+        return {
+            "success": True,
+            "annotation": result.data[0] if result.data else annotation_data
+        }
+        
+    except Exception as e:
+        print(f"Error creating annotation: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create annotation: {str(e)}")
+
+@app.get("/documents/{document_id}/annotations")
+async def get_annotations(
+    document_id: str,
+    workspace_id: Optional[str] = None,
+    current_user = Depends(get_current_user),
+    authorization: str = Header(None)
+):
+    """
+    Get all annotations for a document.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_supabase = get_user_supabase_client(access_token)
+        
+        query = user_supabase.table("document_annotations").select("""
+            *,
+            profiles(full_name, email)
+        """).eq("document_id", document_id)
+        
+        if workspace_id:
+            query = query.eq("workspace_id", workspace_id)
+        
+        result = query.order("created_at").execute()
+        
+        return {
+            "success": True,
+            "annotations": result.data or []
+        }
+        
+    except Exception as e:
+        print(f"Error getting annotations: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get annotations: {str(e)}")
+
+@app.put("/annotations/{annotation_id}")
+async def update_annotation(
+    annotation_id: str,
+    request: UpdateAnnotationRequest,
+    current_user = Depends(get_current_user),
+    authorization: str = Header(None)
+):
+    """
+    Update an annotation's content or color.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_supabase = get_user_supabase_client(access_token)
+        
+        update_data = {}
+        if request.note_content is not None:
+            update_data["note_content"] = request.note_content
+        if request.color is not None:
+            update_data["color"] = request.color
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+        
+        result = user_supabase.table("document_annotations").update(update_data).eq("id", annotation_id).execute()
+        
+        return {
+            "success": True,
+            "annotation": result.data[0] if result.data else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating annotation: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update annotation: {str(e)}")
+
+@app.delete("/annotations/{annotation_id}")
+async def delete_annotation(
+    annotation_id: str,
+    current_user = Depends(get_current_user),
+    authorization: str = Header(None)
+):
+    """
+    Delete an annotation.
+    """
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_supabase = get_user_supabase_client(access_token)
+        
+        result = user_supabase.table("document_annotations").delete().eq("id", annotation_id).execute()
+        
+        return {
+            "success": True,
+            "message": "Annotation deleted"
+        }
+        
+    except Exception as e:
+        print(f"Error deleting annotation: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete annotation: {str(e)}")
+
 @app.get("/vector-stats")
 async def get_vector_stats(current_user = Depends(get_current_user)):
     if not vector_service:
@@ -618,6 +940,202 @@ async def get_vector_stats(current_user = Depends(get_current_user)):
     except Exception as e:
         print(f"Error getting vector stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+@app.post("/case-brief/generate")
+async def generate_case_brief(
+    request: CaseBriefRequest,
+    current_user = Depends(get_current_user)
+):
+    """
+    Generate a structured case brief from a legal document
+    Supports full briefs or quick summaries
+    """
+    if not case_brief_service:
+        raise HTTPException(status_code=503, detail="Case Brief service not available. OpenAI API key not configured.")
+    
+    if not vector_service:
+        raise HTTPException(status_code=500, detail="Vector service not configured")
+    
+    try:
+        user_id = current_user.user.id
+        
+        print(f"[CASE BRIEF] Generating {request.brief_type} brief for document {request.document_id}")
+        
+        # Retrieve all chunks for this document from vector database
+        # We use a broad query to get all chunks from the document
+        all_chunks = vector_service.search_similar(
+            query="case law facts issues holding reasoning disposition court decision",
+            user_id=user_id,
+            top_k=100,  # Get many chunks
+            min_score=0.0  # Accept all chunks from the document
+        )
+        
+        # Filter to only chunks from the requested document
+        document_chunks = [
+            chunk for chunk in all_chunks 
+            if chunk.get('document_id') == request.document_id
+        ]
+        
+        if not document_chunks:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No content found for document {request.document_id}. Document may not exist or may not belong to you."
+            )
+        
+        print(f"[CASE BRIEF] Found {len(document_chunks)} chunks for document")
+        
+        # Generate the case brief
+        brief_result = case_brief_service.generate_case_brief(
+            document_chunks=document_chunks,
+            document_id=request.document_id,
+            brief_type=request.brief_type,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens
+        )
+        
+        if not brief_result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate case brief: {brief_result.get('error', 'Unknown error')}"
+            )
+        
+        print(f"[CASE BRIEF] Successfully generated brief")
+        
+        return brief_result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[CASE BRIEF] Error in case brief endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Case brief generation failed: {str(e)}")
+
+@app.post("/case-brief/extract-section")
+async def extract_case_section(
+    document_id: str,
+    section: str,
+    current_user = Depends(get_current_user)
+):
+    """
+    Extract a specific section from a case (facts, issues, holding, reasoning, etc.)
+    """
+    if not case_brief_service:
+        raise HTTPException(status_code=503, detail="Case Brief service not available")
+    
+    if not vector_service:
+        raise HTTPException(status_code=500, detail="Vector service not configured")
+    
+    try:
+        user_id = current_user.user.id
+        
+        # Retrieve document chunks
+        all_chunks = vector_service.search_similar(
+            query=f"case {section}",
+            user_id=user_id,
+            top_k=100,
+            min_score=0.0
+        )
+        
+        document_chunks = [
+            chunk for chunk in all_chunks 
+            if chunk.get('document_id') == document_id
+        ]
+        
+        if not document_chunks:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Extract the section
+        result = case_brief_service.extract_specific_section(
+            document_chunks=document_chunks,
+            section=section
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[CASE BRIEF] Error extracting section: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/case-brief/compare")
+async def compare_cases(
+    request: CaseBriefCompareRequest,
+    current_user = Depends(get_current_user)
+):
+    """
+    Compare multiple case briefs and provide comparative analysis
+    """
+    if not case_brief_service:
+        raise HTTPException(status_code=503, detail="Case Brief service not available")
+    
+    if not vector_service:
+        raise HTTPException(status_code=500, detail="Vector service not configured")
+    
+    try:
+        user_id = current_user.user.id
+        
+        if len(request.document_ids) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 documents required for comparison")
+        
+        print(f"[CASE BRIEF] Comparing {len(request.document_ids)} cases")
+        
+        # Generate briefs for each document
+        case_briefs = []
+        for doc_id in request.document_ids:
+            # Get document chunks
+            all_chunks = vector_service.search_similar(
+                query="case law legal",
+                user_id=user_id,
+                top_k=100,
+                min_score=0.0
+            )
+            
+            document_chunks = [
+                chunk for chunk in all_chunks 
+                if chunk.get('document_id') == doc_id
+            ]
+            
+            if not document_chunks:
+                print(f"[WARNING] No chunks found for document {doc_id}")
+                continue
+            
+            # Generate brief
+            brief = case_brief_service.generate_case_brief(
+                document_chunks=document_chunks,
+                document_id=doc_id,
+                brief_type="summary",  # Use summary for comparison to save tokens
+                temperature=0.2,
+                max_tokens=1500
+            )
+            
+            if brief.get("success"):
+                case_briefs.append(brief)
+        
+        if len(case_briefs) < 2:
+            raise HTTPException(
+                status_code=400, 
+                detail="Could not generate briefs for at least 2 documents"
+            )
+        
+        # Compare the cases
+        comparison = case_brief_service.compare_cases(
+            case_briefs=case_briefs,
+            comparison_focus=request.comparison_focus,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens
+        )
+        
+        return comparison
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[CASE BRIEF] Error comparing cases: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug/user-vectors")
 async def debug_user_vectors(current_user = Depends(get_current_user)):
@@ -648,3 +1166,464 @@ async def debug_user_vectors(current_user = Depends(get_current_user)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Debug failed: {str(e)}")
+
+# ==================== WORKSPACE ENDPOINTS ====================
+
+@app.post("/workspaces")
+async def create_workspace(
+    request: CreateWorkspaceRequest,
+    current_user = Depends(get_current_user)
+):
+    """Create a new collaborative workspace"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        result = workspace_service.create_workspace(
+            name=request.name,
+            description=request.description,
+            owner_id=user_id,
+            settings=request.settings
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to create workspace"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in create workspace endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/workspaces")
+async def list_workspaces(current_user = Depends(get_current_user)):
+    """Get all workspaces the current user is a member of"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        result = workspace_service.list_user_workspaces(user_id)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to list workspaces"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in list workspaces endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/workspaces/{workspace_id}")
+async def get_workspace(
+    workspace_id: str,
+    current_user = Depends(get_current_user)
+):
+    """Get workspace details"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        result = workspace_service.get_workspace(workspace_id, user_id)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=404, detail=result.get("error", "Workspace not found"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in get workspace endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/workspaces/{workspace_id}")
+async def update_workspace(
+    workspace_id: str,
+    request: UpdateWorkspaceRequest,
+    current_user = Depends(get_current_user)
+):
+    """Update workspace settings (admin/owner only)"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        updates = request.dict(exclude_unset=True)
+        
+        result = workspace_service.update_workspace(workspace_id, user_id, updates)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=403, detail=result.get("error", "Failed to update workspace"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in update workspace endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/workspaces/{workspace_id}")
+async def delete_workspace(
+    workspace_id: str,
+    current_user = Depends(get_current_user)
+):
+    """Delete a workspace (owner only)"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        result = workspace_service.delete_workspace(workspace_id, user_id)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=403, detail=result.get("error", "Failed to delete workspace"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in delete workspace endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/workspaces/{workspace_id}/members/invite-by-email")
+async def invite_member_by_email(
+    workspace_id: str,
+    request: InviteMemberByEmailRequest,
+    current_user = Depends(get_current_user)
+):
+    """Invite a member to a workspace by their email address"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        # Validate role
+        try:
+            role = WorkspaceRole(request.role)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {request.role}")
+        
+        result = workspace_service.add_member_by_email(
+            workspace_id=workspace_id,
+            email=request.email,
+            role=role,
+            added_by=user_id
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to invite member"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in invite by email endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/workspaces/{workspace_id}/members")
+async def add_workspace_member(
+    workspace_id: str,
+    request: AddMemberRequest,
+    current_user = Depends(get_current_user)
+):
+    """Add a member to a workspace (by user ID - legacy method)"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        # Validate role
+        try:
+            role = WorkspaceRole(request.role)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {request.role}")
+        
+        result = workspace_service.add_member(
+            workspace_id=workspace_id,
+            user_id=request.user_id,
+            role=role,
+            added_by=user_id
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to add member"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in add member endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/workspaces/{workspace_id}/members")
+async def get_workspace_members(
+    workspace_id: str,
+    current_user = Depends(get_current_user)
+):
+    """Get all members of a workspace"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        # Check if user is a member
+        if not workspace_service.is_member(workspace_id, user_id):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        result = workspace_service.get_members(workspace_id)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in get members endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/workspaces/{workspace_id}/members/{member_id}")
+async def remove_workspace_member(
+    workspace_id: str,
+    member_id: str,
+    current_user = Depends(get_current_user)
+):
+    """Remove a member from a workspace"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        result = workspace_service.remove_member(workspace_id, member_id, user_id)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=403, detail=result.get("error", "Failed to remove member"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in remove member endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/workspaces/{workspace_id}/members/{member_id}/role")
+async def update_member_role(
+    workspace_id: str,
+    member_id: str,
+    request: UpdateMemberRoleRequest,
+    current_user = Depends(get_current_user)
+):
+    """Update a member's role"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        # Validate role
+        try:
+            role = WorkspaceRole(request.role)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {request.role}")
+        
+        result = workspace_service.update_member_role(
+            workspace_id=workspace_id,
+            user_id=member_id,
+            new_role=role,
+            updated_by=user_id
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=403, detail=result.get("error", "Failed to update role"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in update member role endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/workspaces/documents/share")
+async def share_document_with_workspace(
+    request: ShareDocumentRequest,
+    current_user = Depends(get_current_user)
+):
+    """Share a document with a workspace"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        result = workspace_service.share_document(
+            workspace_id=request.workspace_id,
+            document_id=request.document_id,
+            user_id=user_id,
+            permissions=request.permissions
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to share document"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in share document endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/workspaces/{workspace_id}/documents/{document_id}")
+async def unshare_document(
+    workspace_id: str,
+    document_id: str,
+    current_user = Depends(get_current_user)
+):
+    """Remove a document from workspace sharing"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        result = workspace_service.unshare_document(workspace_id, document_id, user_id)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=403, detail=result.get("error", "Failed to unshare document"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in unshare document endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/workspaces/{workspace_id}/documents")
+async def get_workspace_documents(
+    workspace_id: str,
+    current_user = Depends(get_current_user),
+    authorization: str = Header(None)
+):
+    """Get all documents shared in a workspace"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    # Extract access token for user-authenticated client
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_id = current_user.user.id
+        
+        # Create user-authenticated Supabase client to respect RLS policies
+        user_supabase = get_user_supabase_client(access_token)
+        
+        # Pass user client to workspace service for proper RLS handling
+        result = workspace_service.get_workspace_documents(workspace_id, user_id, user_client=user_supabase)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=403, detail=result.get("error", "Access denied"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in get workspace documents endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/workspaces/comments")
+async def add_document_comment(
+    request: AddCommentRequest,
+    current_user = Depends(get_current_user)
+):
+    """Add a comment to a document in a workspace"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        result = workspace_service.add_comment(
+            workspace_id=request.workspace_id,
+            document_id=request.document_id,
+            user_id=user_id,
+            content=request.content,
+            context=request.context
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to add comment"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in add comment endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/workspaces/{workspace_id}/documents/{document_id}/comments")
+async def get_document_comments(
+    workspace_id: str,
+    document_id: str,
+    current_user = Depends(get_current_user)
+):
+    """Get all comments for a document"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        result = workspace_service.get_document_comments(workspace_id, document_id, user_id)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=403, detail=result.get("error", "Access denied"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in get comments endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/workspaces/{workspace_id}/activity")
+async def get_workspace_activity(
+    workspace_id: str,
+    current_user = Depends(get_current_user),
+    limit: int = 50
+):
+    """Get activity feed for a workspace"""
+    if not workspace_service:
+        raise HTTPException(status_code=503, detail="Workspace service not available")
+    
+    try:
+        user_id = current_user.user.id
+        result = workspace_service.get_activity_feed(workspace_id, user_id, limit)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=403, detail=result.get("error", "Access denied"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[WORKSPACE] Error in get activity endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

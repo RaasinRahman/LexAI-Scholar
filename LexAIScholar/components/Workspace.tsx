@@ -386,22 +386,22 @@ export default function Workspace() {
               <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
                 <h3 className="text-white font-medium mb-3">Invite Team Member</h3>
                 <p className="text-sm text-gray-400 mb-3">
-                  Enter their User ID to invite them to this workspace. They can find their User ID on their dashboard.
+                  Enter their email address to invite them to this workspace. They must have an account already.
                 </p>
                 <div className="space-y-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      User ID
+                      Email Address
                     </label>
                     <input
-                      type="text"
-                      placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000"
+                      type="email"
+                      placeholder="colleague@university.edu"
                       value={newMemberEmail}
                       onChange={(e) => setNewMemberEmail(e.target.value)}
-                      className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      💡 Ask them to copy their User ID from their dashboard
+                      💡 They'll be added immediately if they have an account
                     </p>
                   </div>
                   <div>
@@ -421,19 +421,20 @@ export default function Workspace() {
                   <div className="flex gap-2">
                     <button
                       onClick={async () => {
-                        if (!newMemberEmail.trim()) return;
+                        const email = newMemberEmail.trim();
+                        if (!email) return;
                         
-                        // Basic UUID validation
-                        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-                        if (!uuidRegex.test(newMemberEmail.trim())) {
-                          alert('Please enter a valid User ID (UUID format)');
+                        // Basic email validation
+                        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                        if (!emailRegex.test(email)) {
+                          alert('Please enter a valid email address');
                           return;
                         }
                         
                         try {
-                          await api.addWorkspaceMember(
+                          await api.inviteMemberByEmail(
                             currentWorkspace.id,
-                            newMemberEmail.trim(),
+                            email,
                             newMemberRole,
                             session!.access_token
                           );

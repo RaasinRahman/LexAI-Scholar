@@ -315,25 +315,48 @@ class WorkspaceService:
     
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """
-        Look up a user by their email address
+        Look up a user by their email address from Supabase Auth
+        Uses the get_user_id_by_email() SQL function to query auth.users
         
         Args:
             email: User's email address
             
         Returns:
-            User profile if found, None otherwise
+            User data if found, None otherwise
         """
         try:
-            result = self.supabase.table("profiles").select("*").eq("email", email).execute()
+            email_clean = email.lower().strip()
+            
+            # Use the SQL function to look up user from auth.users
+            # This function is created by SIMPLE_EMAIL_LOOKUP.sql
+            result = self.supabase.rpc(
+                "get_user_id_by_email",
+                {"user_email": email_clean}
+            ).execute()
             
             if result.data and len(result.data) > 0:
-                return result.data[0]
+                user_data = result.data[0]
+                print(f"[WORKSPACE] Found user: {user_data.get('email')} (ID: {user_data.get('id')})")
+                return user_data
+            
+            print(f"[WORKSPACE] No user found with email: {email}")
+            print(f"[WORKSPACE] Make sure:")
+            print(f"  1. User has signed up with Supabase Auth")
+            print(f"  2. The get_user_id_by_email() function exists (run SIMPLE_EMAIL_LOOKUP.sql)")
+            print(f"  3. Email is correct: '{email_clean}'")
             return None
             
         except Exception as e:
-            print(f"[WORKSPACE] Error looking up user by email: {e}")
-            print(f"[WORKSPACE] Make sure the profiles table has an 'email' column!")
-            print(f"[WORKSPACE] Run ADD_EMAIL_TO_PROFILES.sql to fix this.")
+            error_msg = str(e).lower()
+            
+            if "function" in error_msg and "does not exist" in error_msg:
+                print(f"[WORKSPACE] ERROR: get_user_id_by_email() function not found!")
+                print(f"[WORKSPACE] Run SIMPLE_EMAIL_LOOKUP.sql in Supabase SQL Editor to create it.")
+            else:
+                print(f"[WORKSPACE] Error looking up user by email: {e}")
+                import traceback
+                traceback.print_exc()
+            
             return None
     
     def add_member_by_email(
@@ -548,24 +571,62 @@ class WorkspaceService:
     
     def get_members(self, workspace_id: str) -> Dict[str, Any]:
         """
-        Get all members of a workspace
+        Get all members of a workspace with their info from auth.users
         
         Args:
             workspace_id: Workspace ID
             
         Returns:
-            List of members with their roles
+            List of members with their roles, emails, and names
         """
         try:
-            result = self.supabase.table("workspace_members").select("*, profiles(id, email, full_name, avatar_url)").eq("workspace_id", workspace_id).execute()
+            # Use SQL function to get members with auth.users info
+            result = self.supabase.rpc(
+                "get_workspace_members_with_info",
+                {"workspace_uuid": workspace_id}
+            ).execute()
+            
+            if result.data:
+                # Transform data to match expected format (with nested profiles structure for frontend compatibility)
+                members = []
+                for member in result.data:
+                    members.append({
+                        "id": member.get("id"),
+                        "workspace_id": member.get("workspace_id"),
+                        "user_id": member.get("user_id"),
+                        "role": member.get("role"),
+                        "added_by": member.get("added_by"),
+                        "joined_at": member.get("joined_at"),
+                        "profiles": {
+                            "id": member.get("user_id"),
+                            "email": member.get("user_email"),
+                            "full_name": member.get("user_full_name"),
+                            "avatar_url": None  # Could be added later if needed
+                        }
+                    })
+                
+                print(f"[WORKSPACE] Retrieved {len(members)} members for workspace {workspace_id}")
+                return {
+                    "success": True,
+                    "members": members
+                }
             
             return {
                 "success": True,
-                "members": result.data
+                "members": []
             }
             
         except Exception as e:
-            print(f"[WORKSPACE] Error getting members: {e}")
+            error_msg = str(e).lower()
+            
+            if "function" in error_msg and "does not exist" in error_msg:
+                print(f"[WORKSPACE] ERROR: get_workspace_members_with_info() function not found!")
+                print(f"[WORKSPACE] Run GET_WORKSPACE_MEMBERS_WITH_INFO.sql in Supabase SQL Editor.")
+            else:
+                print(f"[WORKSPACE] Error getting members: {e}")
+                import traceback
+                traceback.print_exc()
+            
             return {
                 "success": False,
                 "error": str(e),
@@ -845,7 +906,7 @@ class WorkspaceService:
         user_id: str
     ) -> Dict[str, Any]:
         """
-        Get all comments for a document
+        Get all comments for a document with user info from auth.users
         
         Args:
             workspace_id: Workspace ID
@@ -853,7 +914,7 @@ class WorkspaceService:
             user_id: User requesting comments
             
         Returns:
-            List of comments
+            List of comments with user emails and names
         """
         try:
             if not self.is_member(workspace_id, user_id):
@@ -863,15 +924,55 @@ class WorkspaceService:
                     "comments": []
                 }
             
-            result = self.supabase.table("document_comments").select("*, profiles(id, email, full_name, avatar_url)").eq("workspace_id", workspace_id).eq("document_id", document_id).order("created_at").execute()
+            # Use SQL function to get comments with auth.users info
+            result = self.supabase.rpc(
+                "get_document_comments_with_info",
+                {
+                    "p_workspace_id": workspace_id,
+                    "p_document_id": document_id
+                }
+            ).execute()
+            
+            if result.data:
+                # Transform to match expected format with nested profiles
+                comments = []
+                for comment in result.data:
+                    comments.append({
+                        "id": comment.get("id"),
+                        "workspace_id": comment.get("workspace_id"),
+                        "document_id": comment.get("document_id"),
+                        "user_id": comment.get("user_id"),
+                        "content": comment.get("content"),
+                        "context": comment.get("context"),
+                        "created_at": comment.get("created_at"),
+                        "updated_at": comment.get("updated_at"),
+                        "profiles": {
+                            "id": comment.get("user_id"),
+                            "email": comment.get("user_email"),
+                            "full_name": comment.get("user_full_name"),
+                            "avatar_url": None
+                        }
+                    })
+                
+                return {
+                    "success": True,
+                    "comments": comments
+                }
             
             return {
                 "success": True,
-                "comments": result.data
+                "comments": []
             }
             
         except Exception as e:
-            print(f"[WORKSPACE] Error getting comments: {e}")
+            error_msg = str(e).lower()
+            
+            if "function" in error_msg and "does not exist" in error_msg:
+                print(f"[WORKSPACE] ERROR: get_document_comments_with_info() function not found!")
+                print(f"[WORKSPACE] Run GET_COMMENTS_AND_ACTIVITIES_WITH_INFO.sql in Supabase SQL Editor.")
+            else:
+                print(f"[WORKSPACE] Error getting comments: {e}")
+            
             return {
                 "success": False,
                 "error": str(e),
@@ -918,7 +1019,7 @@ class WorkspaceService:
         limit: int = 50
     ) -> Dict[str, Any]:
         """
-        Get activity feed for a workspace
+        Get activity feed for a workspace with user info from auth.users
         
         Args:
             workspace_id: Workspace ID
@@ -926,7 +1027,7 @@ class WorkspaceService:
             limit: Number of activities to return
             
         Returns:
-            List of activities
+            List of activities with user emails and names
         """
         try:
             if not self.is_member(workspace_id, user_id):
@@ -936,15 +1037,53 @@ class WorkspaceService:
                     "activities": []
                 }
             
-            result = self.supabase.table("workspace_activities").select("*, profiles(id, email, full_name, avatar_url)").eq("workspace_id", workspace_id).order("created_at", desc=True).limit(limit).execute()
+            # Use SQL function to get activities with auth.users info
+            result = self.supabase.rpc(
+                "get_workspace_activities_with_info",
+                {
+                    "p_workspace_id": workspace_id,
+                    "p_limit": limit
+                }
+            ).execute()
+            
+            if result.data:
+                # Transform to match expected format with nested profiles
+                activities = []
+                for activity in result.data:
+                    activities.append({
+                        "id": activity.get("id"),
+                        "workspace_id": activity.get("workspace_id"),
+                        "user_id": activity.get("user_id"),
+                        "action": activity.get("action"),
+                        "details": activity.get("details"),
+                        "created_at": activity.get("created_at"),
+                        "profiles": {
+                            "id": activity.get("user_id"),
+                            "email": activity.get("user_email"),
+                            "full_name": activity.get("user_full_name"),
+                            "avatar_url": None
+                        }
+                    })
+                
+                return {
+                    "success": True,
+                    "activities": activities
+                }
             
             return {
                 "success": True,
-                "activities": result.data
+                "activities": []
             }
             
         except Exception as e:
-            print(f"[WORKSPACE] Error getting activity feed: {e}")
+            error_msg = str(e).lower()
+            
+            if "function" in error_msg and "does not exist" in error_msg:
+                print(f"[WORKSPACE] ERROR: get_workspace_activities_with_info() function not found!")
+                print(f"[WORKSPACE] Run GET_COMMENTS_AND_ACTIVITIES_WITH_INFO.sql in Supabase SQL Editor.")
+            else:
+                print(f"[WORKSPACE] Error getting activity feed: {e}")
+            
             return {
                 "success": False,
                 "error": str(e),

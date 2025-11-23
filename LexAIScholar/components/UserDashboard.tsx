@@ -10,13 +10,16 @@ import AIChat from './AIChat';
 import CaseBrief from './CaseBrief';
 import Workspace from './Workspace';
 import WorkspaceSelector from './WorkspaceSelector';
-import { Upload, Search, Library, Target, Zap, Lock, Lightbulb, Hand, MessageSquare, Scale, Users } from 'lucide-react';
+import PracticeQuestions from './PracticeQuestions';
+import Analytics from './Analytics';
+import StudyPlan from './StudyPlan';
+import { Upload, Search, Library, Target, Zap, Lock, Lightbulb, Hand, MessageSquare, Scale, Users, BookOpen, BarChart3, Calendar } from 'lucide-react';
 
 export default function UserDashboard() {
   const { user } = useAuth();
   const { currentWorkspace } = useWorkspace();
   const [refreshDocuments, setRefreshDocuments] = useState(false);
-  const [activeTab, setActiveTab] = useState<'upload' | 'search' | 'chat' | 'library' | 'casebrief' | 'workspace'>('chat');
+  const [activeTab, setActiveTab] = useState<'upload' | 'search' | 'chat' | 'library' | 'casebrief' | 'workspace' | 'practice' | 'analytics' | 'studyplan'>('chat');
 
   const fullName = user?.user_metadata?.full_name || 'User';
 
@@ -97,6 +100,39 @@ export default function UserDashboard() {
           >
             <Scale className="w-4 h-4" />
             Case Briefs
+          </button>
+          <button
+            onClick={() => setActiveTab('practice')}
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'practice'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            Practice Questions
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'analytics'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            Analytics
+          </button>
+          <button
+            onClick={() => setActiveTab('studyplan')}
+            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'studyplan'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Study Plan
           </button>
           {currentWorkspace && (
             <button
@@ -276,6 +312,102 @@ export default function UserDashboard() {
                   <div>
                     <p className="text-white font-medium mb-1">Export & Share</p>
                     <p className="text-gray-400">Download briefs as text files or copy to clipboard</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'practice' && (
+            <>
+              <PracticeQuestions />
+              
+              {/* Practice Questions Info */}
+              <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-purple-400" />
+                  Practice Questions Features
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-white font-medium mb-1">AI-Generated Questions</p>
+                    <p className="text-gray-400">Automatically generate practice questions from your uploaded documents</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Multiple Question Types</p>
+                    <p className="text-gray-400">Multiple choice, short answer, and true/false questions</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Adaptive Difficulty</p>
+                    <p className="text-gray-400">Choose from easy, medium, or hard difficulty levels</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Instant Feedback</p>
+                    <p className="text-gray-400">Get immediate evaluation with explanations for each answer</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'analytics' && (
+            <>
+              <Analytics />
+              
+              {/* Analytics Info */}
+              <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-blue-400" />
+                  Analytics Features
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-white font-medium mb-1">Performance Tracking</p>
+                    <p className="text-gray-400">Monitor your quiz scores and improvement trends over time</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Knowledge Gaps</p>
+                    <p className="text-gray-400">Identify weak areas and topics that need more attention</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Learning Streaks</p>
+                    <p className="text-gray-400">Track your study consistency and build positive habits</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Detailed Insights</p>
+                    <p className="text-gray-400">View performance by difficulty, question type, and more</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'studyplan' && (
+            <>
+              <StudyPlan />
+              
+              {/* Study Plan Info */}
+              <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-purple-400" />
+                  Study Plan Features
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-white font-medium mb-1">AI-Powered Plans</p>
+                    <p className="text-gray-400">Personalized 7-day study plans based on your performance</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Custom Goals</p>
+                    <p className="text-gray-400">Set target scores, exam dates, and focus areas</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Daily Tasks</p>
+                    <p className="text-gray-400">Structured daily activities with specific time allocations</p>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium mb-1">Smart Recommendations</p>
+                    <p className="text-gray-400">Get quick recommendations without generating a full plan</p>
                   </div>
                 </div>
               </div>

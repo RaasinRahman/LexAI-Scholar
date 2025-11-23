@@ -739,6 +739,217 @@ class APIClient {
 
     return response.json();
   }
+
+  // ==================== PRACTICE QUESTIONS METHODS ====================
+
+  async generatePracticeQuestions(
+    documentId: string,
+    token: string,
+    options?: {
+      questionCount?: number;
+      questionTypes?: string[];
+      difficulty?: 'easy' | 'medium' | 'hard';
+      focusArea?: string;
+      temperature?: number;
+    }
+  ): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/practice-questions/generate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify({
+        document_id: documentId,
+        question_count: options?.questionCount || 5,
+        question_types: options?.questionTypes,
+        difficulty: options?.difficulty || 'medium',
+        focus_area: options?.focusArea,
+        temperature: options?.temperature || 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to generate practice questions');
+    }
+
+    return response.json();
+  }
+
+  async generateQuiz(
+    documentIds: string[],
+    quizName: string,
+    token: string,
+    options?: {
+      questionCount?: number;
+      questionTypes?: string[];
+      difficulty?: 'easy' | 'medium' | 'hard';
+    }
+  ): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/practice-questions/generate-quiz`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify({
+        document_ids: documentIds,
+        quiz_name: quizName,
+        question_count: options?.questionCount || 10,
+        question_types: options?.questionTypes,
+        difficulty: options?.difficulty || 'medium',
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to generate quiz');
+    }
+
+    return response.json();
+  }
+
+  async evaluateAnswer(
+    question: any,
+    userAnswer: any,
+    token: string,
+    temperature?: number
+  ): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/practice-questions/evaluate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify({
+        question,
+        user_answer: userAnswer,
+        temperature: temperature || 0.3,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to evaluate answer');
+    }
+
+    return response.json();
+  }
+
+  // ==================== ANALYTICS METHODS ====================
+
+  async recordQuizSession(
+    quizData: {
+      quizId?: string;
+      documentIds: string[];
+      totalQuestions: number;
+      correctAnswers: number;
+      difficulty: string;
+      questionTypes: string[];
+      startTime: string;
+      endTime?: string;
+      performanceByType?: any;
+      topicsCovered?: string[];
+    },
+    token: string
+  ): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/analytics/record-session`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify({
+        quiz_id: quizData.quizId,
+        document_ids: quizData.documentIds,
+        total_questions: quizData.totalQuestions,
+        correct_answers: quizData.correctAnswers,
+        difficulty: quizData.difficulty,
+        question_types: quizData.questionTypes,
+        start_time: quizData.startTime,
+        end_time: quizData.endTime,
+        performance_by_type: quizData.performanceByType,
+        topics_covered: quizData.topicsCovered,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to record quiz session');
+    }
+
+    return response.json();
+  }
+
+  async getProgressAnalytics(
+    token: string,
+    timePeriodDays?: number
+  ): Promise<any> {
+    const url = timePeriodDays
+      ? `${API_BASE_URL}/analytics/progress?time_period_days=${timePeriodDays}`
+      : `${API_BASE_URL}/analytics/progress`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.getAuthHeaders(token),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to get progress analytics');
+    }
+
+    return response.json();
+  }
+
+  async getPerformanceSummary(
+    token: string,
+    timePeriodDays: number = 7
+  ): Promise<any> {
+    const response = await fetch(
+      `${API_BASE_URL}/analytics/summary?time_period_days=${timePeriodDays}`,
+      {
+        method: 'GET',
+        headers: this.getAuthHeaders(token),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to get performance summary');
+    }
+
+    return response.json();
+  }
+
+  // ==================== STUDY PLAN METHODS ====================
+
+  async generateStudyPlan(
+    token: string,
+    options?: {
+      timeCommitment?: 'light' | 'moderate' | 'intensive';
+      goals?: any;
+    }
+  ): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/study-plan/generate`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(token),
+      body: JSON.stringify({
+        time_commitment: options?.timeCommitment || 'moderate',
+        goals: options?.goals,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to generate study plan');
+    }
+
+    return response.json();
+  }
+
+  async getQuickRecommendations(token: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/study-plan/recommendations`, {
+      method: 'GET',
+      headers: this.getAuthHeaders(token),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to get recommendations');
+    }
+
+    return response.json();
+  }
 }
 
 export const api = new APIClient();

@@ -13,6 +13,9 @@ from vector_service import VectorService
 from rag_service import RAGService
 from case_brief_service import CaseBriefService
 from workspace_service import WorkspaceService, WorkspaceRole
+from practice_questions_service import PracticeQuestionsService
+from analytics_service import AnalyticsService
+from study_plan_service import StudyPlanService
 
 load_dotenv()
 
@@ -79,6 +82,35 @@ except Exception as e:
     workspace_service = None
     print(f"[ERROR] Failed to initialize Workspace service: {e}")
 
+try:
+    if OPENAI_API_KEY:
+        practice_questions_service = PracticeQuestionsService(openai_api_key=OPENAI_API_KEY)
+        print("[SUCCESS] Practice Questions service initialized successfully")
+    else:
+        practice_questions_service = None
+        print("[WARNING] OpenAI API key not found. Practice Questions features will be disabled.")
+except Exception as e:
+    practice_questions_service = None
+    print(f"[ERROR] Failed to initialize Practice Questions service: {e}")
+
+try:
+    analytics_service = AnalyticsService()
+    print("[SUCCESS] Analytics service initialized successfully")
+except Exception as e:
+    analytics_service = None
+    print(f"[ERROR] Failed to initialize Analytics service: {e}")
+
+try:
+    if OPENAI_API_KEY:
+        study_plan_service = StudyPlanService(openai_api_key=OPENAI_API_KEY)
+        print("[SUCCESS] Study Plan service initialized successfully")
+    else:
+        study_plan_service = None
+        print("[WARNING] OpenAI API key not found. Study Plan features will be disabled.")
+except Exception as e:
+    study_plan_service = None
+    print(f"[ERROR] Failed to initialize Study Plan service: {e}")
+
 class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
@@ -131,6 +163,42 @@ class ConversationMessage(BaseModel):
     content: str
     timestamp: Optional[str] = None
     citations: Optional[List[Dict[str, Any]]] = None
+
+class GeneratePracticeQuestionsRequest(BaseModel):
+    document_id: str
+    question_count: Optional[int] = 5
+    question_types: Optional[List[str]] = None  # ['multiple_choice', 'short_answer', 'true_false']
+    difficulty: Optional[str] = "medium"  # 'easy', 'medium', 'hard'
+    focus_area: Optional[str] = None
+    temperature: Optional[float] = 0.7
+
+class GenerateQuizRequest(BaseModel):
+    document_ids: List[str]
+    quiz_name: str
+    question_count: Optional[int] = 10
+    question_types: Optional[List[str]] = None
+    difficulty: Optional[str] = "medium"
+
+class EvaluateAnswerRequest(BaseModel):
+    question: Dict[str, Any]
+    user_answer: Any
+    temperature: Optional[float] = 0.3
+
+class RecordQuizSessionRequest(BaseModel):
+    quiz_id: Optional[str] = None
+    document_ids: List[str]
+    total_questions: int
+    correct_answers: int
+    difficulty: str
+    question_types: List[str]
+    start_time: str
+    end_time: Optional[str] = None
+    performance_by_type: Optional[Dict[str, Any]] = None
+    topics_covered: Optional[List[str]] = None
+
+class GenerateStudyPlanRequest(BaseModel):
+    time_commitment: Optional[str] = "moderate"  # light, moderate, intensive
+    goals: Optional[Dict[str, Any]] = None
 
 class CreateWorkspaceRequest(BaseModel):
     name: str
@@ -1626,4 +1694,498 @@ async def get_workspace_activity(
         raise
     except Exception as e:
         print(f"[WORKSPACE] Error in get activity endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== PRACTICE QUESTIONS ENDPOINTS ====================
+
+@app.post("/practice-questions/generate")
+async def generate_practice_questions(
+    request: GeneratePracticeQuestionsRequest,
+    current_user = Depends(get_current_user)
+):
+    """
+    Generate practice questions from a document
+    Supports multiple question types and difficulty levels
+    """
+    if not practice_questions_service:
+        raise HTTPException(status_code=503, detail="Practice Questions service not available. OpenAI API key not configured.")
+    
+    if not vector_service:
+        raise HTTPException(status_code=500, detail="Vector service not configured")
+    
+    try:
+        user_id = current_user.user.id
+        
+        print(f"[PRACTICE QUESTIONS] Generating questions for document {request.document_id}")
+        
+        # Retrieve document chunks from vector database
+        all_chunks = vector_service.search_similar(
+            query="legal case facts issues holding reasoning",
+            user_id=user_id,
+            top_k=100,
+            min_score=0.0
+        )
+        
+        # Filter to only chunks from the requested document
+        document_chunks = [
+            chunk for chunk in all_chunks 
+            if chunk.get('document_id') == request.document_id
+        ]
+        
+        if not document_chunks:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No content found for document {request.document_id}. Document may not exist or may not belong to you."
+            )
+        
+        print(f"[PRACTICE QUESTIONS] Found {len(document_chunks)} chunks for document")
+        
+        # Generate practice questions
+        result = practice_questions_service.generate_questions(
+            document_chunks=document_chunks,
+            document_id=request.document_id,
+            question_count=request.question_count or 5,
+            question_types=request.question_types,
+            difficulty=request.difficulty or "medium",
+            focus_area=request.focus_area,
+            temperature=request.temperature or 0.7
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate questions: {result.get('error', 'Unknown error')}"
+            )
+        
+        print(f"[PRACTICE QUESTIONS] Successfully generated {result.get('question_count')} questions")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[PRACTICE QUESTIONS] Error in generate endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Question generation failed: {str(e)}")
+
+@app.post("/practice-questions/generate-quiz")
+async def generate_quiz(
+    request: GenerateQuizRequest,
+    current_user = Depends(get_current_user)
+):
+    """
+    Generate a comprehensive quiz from multiple documents
+    """
+    if not practice_questions_service:
+        raise HTTPException(status_code=503, detail="Practice Questions service not available")
+    
+    if not vector_service:
+        raise HTTPException(status_code=500, detail="Vector service not configured")
+    
+    try:
+        user_id = current_user.user.id
+        
+        if len(request.document_ids) < 1:
+            raise HTTPException(status_code=400, detail="At least 1 document required for quiz")
+        
+        print(f"[PRACTICE QUESTIONS] Generating quiz from {len(request.document_ids)} documents")
+        
+        # Retrieve chunks for all documents
+        document_chunks_map = {}
+        
+        for doc_id in request.document_ids:
+            all_chunks = vector_service.search_similar(
+                query="legal case facts issues holding reasoning",
+                user_id=user_id,
+                top_k=100,
+                min_score=0.0
+            )
+            
+            document_chunks = [
+                chunk for chunk in all_chunks 
+                if chunk.get('document_id') == doc_id
+            ]
+            
+            if document_chunks:
+                document_chunks_map[doc_id] = document_chunks
+        
+        if not document_chunks_map:
+            raise HTTPException(
+                status_code=404,
+                detail="No content found for the specified documents"
+            )
+        
+        # Generate quiz
+        result = practice_questions_service.generate_quiz(
+            document_ids=list(document_chunks_map.keys()),
+            document_chunks_map=document_chunks_map,
+            quiz_name=request.quiz_name,
+            question_count=request.question_count or 10,
+            difficulty=request.difficulty or "medium",
+            question_types=request.question_types
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate quiz: {result.get('error', 'Unknown error')}"
+            )
+        
+        print(f"[PRACTICE QUESTIONS] Successfully generated quiz with {result.get('question_count')} questions")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[PRACTICE QUESTIONS] Error in generate quiz endpoint: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Quiz generation failed: {str(e)}")
+
+@app.post("/practice-questions/evaluate")
+async def evaluate_answer(
+    request: EvaluateAnswerRequest,
+    current_user = Depends(get_current_user)
+):
+    """
+    Evaluate a user's answer to a practice question
+    Provides feedback and scoring
+    """
+    if not practice_questions_service:
+        raise HTTPException(status_code=503, detail="Practice Questions service not available")
+    
+    try:
+        print(f"[PRACTICE QUESTIONS] Evaluating answer for question type: {request.question.get('type')}")
+        
+        result = practice_questions_service.evaluate_answer(
+            question=request.question,
+            user_answer=request.user_answer,
+            temperature=request.temperature or 0.3
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to evaluate answer: {result.get('error', 'Unknown error')}"
+            )
+        
+        print(f"[PRACTICE QUESTIONS] Answer evaluated - Correct: {result.get('is_correct')}, Score: {result.get('score')}")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[PRACTICE QUESTIONS] Error in evaluate endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Answer evaluation failed: {str(e)}")
+
+# ==================== ANALYTICS ENDPOINTS ====================
+
+@app.post("/analytics/record-session")
+async def record_quiz_session(
+    request: RecordQuizSessionRequest,
+    current_user = Depends(get_current_user),
+    authorization: str = Header(None)
+):
+    """
+    Record a completed quiz session for analytics tracking
+    """
+    if not analytics_service:
+        raise HTTPException(status_code=503, detail="Analytics service not available")
+    
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_id = current_user.user.id
+        user_supabase = get_user_supabase_client(access_token)
+        
+        # Calculate score percentage
+        score_percentage = (request.correct_answers / request.total_questions * 100) if request.total_questions > 0 else 0
+        
+        # Parse timestamps
+        start_time_str = request.start_time
+        end_time_str = request.end_time or datetime.utcnow().isoformat()
+        
+        # Calculate time spent
+        try:
+            start_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+            time_spent_seconds = int((end_dt - start_dt).total_seconds())
+        except:
+            time_spent_seconds = 0
+        
+        # Prepare session data for database
+        session_data = {
+            "user_id": user_id,
+            "quiz_id": request.quiz_id,
+            "document_ids": request.document_ids,
+            "total_questions": request.total_questions,
+            "correct_answers": request.correct_answers,
+            "score_percentage": round(score_percentage, 2),
+            "difficulty": request.difficulty,
+            "question_types": request.question_types,
+            "time_spent_seconds": time_spent_seconds,
+            "performance_by_type": request.performance_by_type or {},
+            "topics_covered": request.topics_covered or [],
+            "start_time": start_time_str,
+            "completed_at": end_time_str
+        }
+        
+        # Store in Supabase
+        result = user_supabase.table("quiz_sessions").insert(session_data).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise Exception("Failed to insert quiz session into database")
+        
+        print(f"[ANALYTICS] Recorded quiz session: {score_percentage:.1f}% score, {request.total_questions} questions")
+        
+        return {
+            "success": True,
+            "session_id": result.data[0].get("id"),
+            "score_percentage": score_percentage,
+            "message": "Quiz session recorded successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ANALYTICS] Error recording session: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to record session: {str(e)}")
+
+@app.get("/analytics/progress")
+async def get_progress_analytics(
+    current_user = Depends(get_current_user),
+    time_period_days: Optional[int] = None,
+    authorization: str = Header(None)
+):
+    """
+    Get comprehensive progress analytics and metrics
+    Returns performance trends, weak areas, and learning statistics
+    """
+    if not analytics_service:
+        raise HTTPException(status_code=503, detail="Analytics service not available")
+    
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_id = current_user.user.id
+        user_supabase = get_user_supabase_client(access_token)
+        
+        print(f"[ANALYTICS] Fetching progress for user {user_id}")
+        
+        # Build query for quiz history
+        query = user_supabase.table("quiz_sessions").select("*").eq("user_id", user_id)
+        
+        # Apply time period filter if specified
+        if time_period_days:
+            from datetime import timedelta
+            cutoff_date = datetime.utcnow() - timedelta(days=time_period_days)
+            query = query.gte("completed_at", cutoff_date.isoformat())
+        
+        # Fetch quiz history from database
+        result = query.order("completed_at", desc=False).execute()
+        quiz_history = result.data or []
+        
+        print(f"[ANALYTICS] Found {len(quiz_history)} quiz sessions")
+        
+        if not quiz_history:
+            return {
+                "success": True,
+                "message": "No quiz data available yet. Complete some quizzes to see your analytics!",
+                "overview": {
+                    "total_quizzes": 0,
+                    "total_questions_answered": 0,
+                    "total_correct_answers": 0,
+                    "overall_accuracy": 0,
+                    "average_score": 0,
+                    "median_score": 0,
+                    "days_active": 0
+                }
+            }
+        
+        # Calculate progress metrics
+        metrics = analytics_service.calculate_progress_metrics(quiz_history)
+        
+        if not metrics.get("success"):
+            raise HTTPException(status_code=500, detail=metrics.get("error", "Failed to calculate metrics"))
+        
+        # Get knowledge gaps
+        gaps = analytics_service.identify_knowledge_gaps(quiz_history)
+        
+        # Add gaps to metrics
+        if gaps.get("success"):
+            metrics["gaps"] = gaps.get("gaps", {})
+        
+        return metrics
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ANALYTICS] Error getting progress: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/analytics/summary")
+async def get_performance_summary(
+    current_user = Depends(get_current_user),
+    time_period_days: Optional[int] = 7,
+    authorization: str = Header(None)
+):
+    """
+    Get a summary of performance for a specific time period
+    """
+    if not analytics_service:
+        raise HTTPException(status_code=503, detail="Analytics service not available")
+    
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    access_token = authorization.replace("Bearer ", "") if authorization else None
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Access token required")
+    
+    try:
+        user_id = current_user.user.id
+        user_supabase = get_user_supabase_client(access_token)
+        
+        # Build query for quiz history
+        from datetime import timedelta
+        cutoff_date = datetime.utcnow() - timedelta(days=time_period_days)
+        
+        result = user_supabase.table("quiz_sessions").select("*").eq("user_id", user_id).gte("completed_at", cutoff_date.isoformat()).execute()
+        quiz_history = result.data or []
+        
+        summary = analytics_service.get_performance_summary(quiz_history, time_period_days)
+        
+        if not summary.get("success"):
+            raise HTTPException(status_code=500, detail=summary.get("error", "Failed to get summary"))
+        
+        return summary
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ANALYTICS] Error getting summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== STUDY PLAN ENDPOINTS ====================
+
+@app.post("/study-plan/generate")
+async def generate_study_plan(
+    request: GenerateStudyPlanRequest,
+    current_user = Depends(get_current_user)
+):
+    """
+    Generate a personalized study plan based on user performance and goals
+    """
+    if not study_plan_service:
+        raise HTTPException(status_code=503, detail="Study Plan service not available. OpenAI API key not configured.")
+    
+    if not analytics_service:
+        raise HTTPException(status_code=503, detail="Analytics service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        print(f"[STUDY PLAN] Generating plan for user {user_id}")
+        
+        # Get user performance analytics
+        quiz_history = []  # TODO: Get from database
+        performance = analytics_service.calculate_progress_metrics(quiz_history)
+        
+        # Get knowledge gaps
+        gaps = analytics_service.identify_knowledge_gaps(quiz_history)
+        if gaps.get("success"):
+            performance["gaps"] = gaps.get("gaps", {})
+        
+        # Get available documents
+        documents = []
+        if supabase:
+            try:
+                docs_result = supabase.table("documents").select("*").eq("user_id", user_id).execute()
+                documents = docs_result.data or []
+            except Exception as e:
+                print(f"[STUDY PLAN] Error fetching documents: {e}")
+        
+        # Generate study plan
+        result = study_plan_service.generate_study_plan(
+            user_performance=performance,
+            available_documents=documents,
+            goals=request.goals,
+            time_commitment=request.time_commitment or "moderate"
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate study plan: {result.get('error', 'Unknown error')}"
+            )
+        
+        print(f"[STUDY PLAN] Successfully generated study plan")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[STUDY PLAN] Error generating plan: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/study-plan/recommendations")
+async def get_quick_recommendations(
+    current_user = Depends(get_current_user)
+):
+    """
+    Get quick study recommendations without generating a full plan
+    """
+    if not study_plan_service:
+        raise HTTPException(status_code=503, detail="Study Plan service not available")
+    
+    if not analytics_service:
+        raise HTTPException(status_code=503, detail="Analytics service not available")
+    
+    try:
+        user_id = current_user.user.id
+        
+        # Get user performance
+        quiz_history = []  # TODO: Get from database
+        performance = analytics_service.calculate_progress_metrics(quiz_history)
+        
+        # Get knowledge gaps
+        gaps = analytics_service.identify_knowledge_gaps(quiz_history)
+        if gaps.get("success"):
+            performance["gaps"] = gaps.get("gaps", {})
+        
+        # Generate recommendations
+        result = study_plan_service.generate_quick_recommendations(
+            user_performance=performance,
+            recent_quiz_results=quiz_history[-5:] if quiz_history else []
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to generate recommendations"))
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[STUDY PLAN] Error getting recommendations: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,0 +1,8 @@
+{
+  "buildCommand": "cd LexAIScholar && npm run build",
+  "devCommand": "cd LexAIScholar && npm run dev",
+  "installCommand": "cd LexAIScholar && npm install",
+  "framework": "nextjs",
+  "outputDirectory": "LexAIScholar/.next"
+}
+

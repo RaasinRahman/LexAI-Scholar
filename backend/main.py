@@ -9,7 +9,8 @@ from datetime import datetime
 import uuid
 
 from pdf_service import PDFProcessor
-from vector_service import VectorService
+# Use OpenAI embeddings instead of sentence-transformers (memory efficient)
+from vector_service_openai import VectorService
 from rag_service import RAGService
 from case_brief_service import CaseBriefService
 from workspace_service import WorkspaceService, WorkspaceRole
@@ -43,8 +44,15 @@ else:
 pdf_processor = PDFProcessor()
 
 try:
-    vector_service = VectorService(pinecone_api_key=PINECONE_API_KEY)
-    print("[SUCCESS] Vector service initialized successfully")
+    if PINECONE_API_KEY and OPENAI_API_KEY:
+        vector_service = VectorService(
+            pinecone_api_key=PINECONE_API_KEY,
+            openai_api_key=OPENAI_API_KEY
+        )
+        print("[SUCCESS] Vector service initialized successfully (using OpenAI embeddings)")
+    else:
+        vector_service = None
+        print("[WARNING] Pinecone or OpenAI API key not found. Vector service disabled.")
 except Exception as e:
     vector_service = None
     print(f"[ERROR] Failed to initialize vector service: {e}")

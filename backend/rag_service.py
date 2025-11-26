@@ -1,8 +1,3 @@
-"""
-RAG (Retrieval Augmented Generation) Service
-Combines vector search with LLM generation for intelligent Q&A
-"""
-
 from typing import List, Dict, Any, Optional
 import openai
 import os
@@ -10,13 +5,10 @@ from datetime import datetime
 
 
 class PromptTemplates:
-    """Collection of prompt engineering templates for different query types"""
     
     @staticmethod
     def get_qa_prompt(query: str, context_chunks: List[Dict[str, Any]]) -> str:
-        """Generate a prompt for question-answering with citations"""
         
-        # Format context with sources
         formatted_context = ""
         for i, chunk in enumerate(context_chunks, 1):
             source_info = f"[Source {i}: {chunk.get('filename', 'Unknown')} - {chunk.get('title', 'Untitled')}]"
@@ -42,7 +34,6 @@ ANSWER (with citations):"""
     
     @staticmethod
     def get_summarization_prompt(context_chunks: List[Dict[str, Any]], focus: Optional[str] = None) -> str:
-        """Generate a prompt for document summarization"""
         
         formatted_context = "\n\n".join([chunk['text'] for chunk in context_chunks])
         
@@ -65,7 +56,6 @@ SUMMARY:"""
     
     @staticmethod
     def get_comparative_analysis_prompt(query: str, context_chunks: List[Dict[str, Any]]) -> str:
-        """Generate a prompt for comparing information across documents"""
         
         grouped_by_doc = {}
         for chunk in context_chunks:
@@ -103,19 +93,16 @@ COMPARATIVE ANALYSIS:"""
     @staticmethod
     def get_conversational_prompt(query: str, context_chunks: List[Dict[str, Any]], 
                                   conversation_history: List[Dict[str, str]]) -> str:
-        """Generate a prompt for conversational AI with context awareness"""
         
-        # Format previous conversation
         history_text = ""
         if conversation_history:
             history_text = "PREVIOUS CONVERSATION:\n"
-            for msg in conversation_history[-3:]:  # Last 3 exchanges
+            for msg in conversation_history[-3:]:
                 role = msg.get('role', 'user').upper()
                 content = msg.get('content', '')
                 history_text += f"{role}: {content}\n"
             history_text += "\n"
         
-        # Format context
         formatted_context = ""
         for i, chunk in enumerate(context_chunks, 1):
             source_info = f"[Source {i}: {chunk.get('filename', 'Unknown')}]"
@@ -142,19 +129,8 @@ RESPONSE:"""
 
 
 class RAGService:
-    """
-    Retrieval Augmented Generation Service
-    Combines vector search with LLM to provide intelligent answers with citations
-    """
     
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
-        """
-        Initialize RAG service with OpenAI
-        
-        Args:
-            openai_api_key: OpenAI API key (defaults to env variable)
-            model: OpenAI model to use (gpt-4o-mini is cost-effective and capable)
-        """
         self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
@@ -174,20 +150,6 @@ class RAGService:
         temperature: float = 0.3,
         max_tokens: int = 1000
     ) -> Dict[str, Any]:
-        """
-        Generate an answer using RAG
-        
-        Args:
-            query: User's question
-            context_chunks: Retrieved document chunks from vector search
-            mode: Type of response - "qa", "summary", "comparative", "conversational"
-            conversation_history: Previous conversation for context
-            temperature: LLM temperature (0.0-1.0, lower = more focused)
-            max_tokens: Maximum response length
-            
-        Returns:
-            Dictionary containing answer, citations, and metadata
-        """
         
         try:
             if not context_chunks:
@@ -199,20 +161,18 @@ class RAGService:
                     "timestamp": datetime.utcnow().isoformat()
                 }
             
-            # Select appropriate prompt template
             if mode == "summary":
                 prompt = self.templates.get_summarization_prompt(context_chunks)
             elif mode == "comparative":
                 prompt = self.templates.get_comparative_analysis_prompt(query, context_chunks)
             elif mode == "conversational" and conversation_history:
                 prompt = self.templates.get_conversational_prompt(query, context_chunks, conversation_history)
-            else:  # Default to QA
+            else:
                 prompt = self.templates.get_qa_prompt(query, context_chunks)
             
             print(f"[RAG] Generating response with {len(context_chunks)} context chunks")
             print(f"[RAG] Mode: {mode}, Temperature: {temperature}")
             
-            # Call OpenAI API
             response = openai.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -228,10 +188,8 @@ class RAGService:
             
             answer = response.choices[0].message.content.strip()
             
-            # Extract citation information
             citations = self._extract_citations(answer, context_chunks)
             
-            # Calculate token usage
             usage = {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
@@ -266,16 +224,10 @@ class RAGService:
             }
     
     def _extract_citations(self, answer: str, context_chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Extract citation information from the answer
-        
-        Returns a list of cited sources with their metadata
-        """
         import re
         
         citations = []
         
-        # Find all [Source N] patterns in the answer
         citation_pattern = r'\[Source (\d+)(?:,\s*(\d+))?\]'
         matches = re.findall(citation_pattern, answer)
         
@@ -285,10 +237,9 @@ class RAGService:
                 if num:
                     cited_indices.add(int(num))
         
-        # Build citation list
         for idx in sorted(cited_indices):
             if idx <= len(context_chunks):
-                chunk = context_chunks[idx - 1]  # 0-indexed
+                chunk = context_chunks[idx - 1]
                 citations.append({
                     "source_number": idx,
                     "document_id": chunk.get("document_id"),
@@ -308,9 +259,6 @@ class RAGService:
         answer: str,
         context_chunks: List[Dict[str, Any]]
     ) -> List[str]:
-        """
-        Generate relevant follow-up questions based on the conversation
-        """
         
         try:
             prompt = f"""Based on this Q&A exchange, suggest 3 relevant follow-up questions the user might want to ask.
@@ -345,9 +293,6 @@ Generate 3 follow-up questions (one per line, no numbering):"""
         self,
         conversation_history: List[Dict[str, str]]
     ) -> str:
-        """
-        Summarize a conversation thread
-        """
         
         try:
             history_text = ""

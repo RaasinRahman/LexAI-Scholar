@@ -33,7 +33,6 @@ export default function UserDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Header */}
         <div className="mb-8">
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1">
@@ -44,24 +43,6 @@ export default function UserDashboard() {
               <p className="text-gray-300 text-lg">
                 Welcome to your LexAI Scholar dashboard. Upload PDFs, chat with AI, and collaborate with your team.
               </p>
-              {/* User ID Display */}
-              <div className="mt-3 flex items-center gap-2">
-                <span className="text-sm text-gray-400">Your User ID:</span>
-                <code className="px-2 py-1 bg-slate-800 text-blue-400 rounded text-xs font-mono">
-                  {user?.id}
-                </code>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(user?.id || '');
-                    alert('User ID copied to clipboard!');
-                  }}
-                  className="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded transition-colors"
-                  title="Copy User ID"
-                >
-                  Copy
-                </button>
-                <span className="text-xs text-gray-500">(Share this to be invited to workspaces)</span>
-              </div>
             </div>
             <div className="w-72 ml-4">
               <WorkspaceSelector />
@@ -77,7 +58,6 @@ export default function UserDashboard() {
           )}
         </div>
 
-        {/* Tab Navigation */}
         <div className="mb-6 flex space-x-2 border-b border-slate-700 overflow-x-auto">
           <button
             onClick={() => setActiveTab('chat')}
@@ -182,13 +162,11 @@ export default function UserDashboard() {
           </button>
         </div>
 
-        {/* Tab Content */}
         <div className="space-y-6">
           {activeTab === 'chat' && (
             <>
               <AIChat />
               
-              {/* Chat Info */}
               <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-blue-400" />
@@ -220,7 +198,6 @@ export default function UserDashboard() {
             <>
               <PDFUpload onUploadSuccess={handleUploadSuccess} />
               
-              {/* Quick Info */}
               <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-3">How it works</h3>
                 <div className="space-y-3">
@@ -254,7 +231,6 @@ export default function UserDashboard() {
             <>
               <SemanticSearch />
               
-              {/* Search Tips */}
               <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                   <Lightbulb className="w-5 h-5 text-yellow-400" />
@@ -290,7 +266,6 @@ export default function UserDashboard() {
             <>
               <CaseBrief />
               
-              {/* Case Brief Info */}
               <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                   <Scale className="w-5 h-5 text-purple-400" />
@@ -322,7 +297,6 @@ export default function UserDashboard() {
             <>
               <PracticeQuestions />
               
-              {/* Practice Questions Info */}
               <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-purple-400" />
@@ -354,7 +328,6 @@ export default function UserDashboard() {
             <>
               <Analytics />
               
-              {/* Analytics Info */}
               <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-blue-400" />
@@ -386,7 +359,6 @@ export default function UserDashboard() {
             <>
               <StudyPlan />
               
-              {/* Study Plan Info */}
               <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-purple-400" />
@@ -418,7 +390,6 @@ export default function UserDashboard() {
             <>
               <Workspace />
               
-              {/* Workspace Info */}
               <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                   <Users className="w-5 h-5 text-green-400" />
@@ -447,7 +418,6 @@ export default function UserDashboard() {
           )}
         </div>
 
-        {/* Quick Stats */}
         <div className="mt-8 grid md:grid-cols-3 gap-6">
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
             <Target className="w-12 h-12 text-blue-400 mb-3" />

@@ -1,7 +1,3 @@
-"""
-Lightweight Vector Service using OpenAI Embeddings API
-Works with Render free tier (no heavy models to load)
-"""
 from pinecone import Pinecone, ServerlessSpec
 from typing import List, Dict, Any, Optional
 import time
@@ -13,7 +9,7 @@ class VectorService:
     def __init__(self, pinecone_api_key: str, openai_api_key: str, index_name: str = "lexai-openai-index"):
         print("Initializing OpenAI client for embeddings...")
         self.openai_client = OpenAI(api_key=openai_api_key)
-        self.embedding_dimension = 1536  # OpenAI text-embedding-3-small dimension
+        self.embedding_dimension = 1536
         
         print("Initializing Pinecone...")
         self.pc = Pinecone(api_key=pinecone_api_key)
@@ -51,12 +47,11 @@ class VectorService:
             raise
     
     def generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding using OpenAI API (no local model needed)"""
         try:
             processed_text = self._preprocess_text(text)
             response = self.openai_client.embeddings.create(
                 input=processed_text,
-                model="text-embedding-3-small"  # Smaller, faster, cheaper
+                model="text-embedding-3-small"
             )
             return response.data[0].embedding
         except Exception as e:
@@ -64,7 +59,7 @@ class VectorService:
             raise
     
     def _preprocess_text(self, text: str) -> str:
-        max_length = 8000  # OpenAI allows up to 8191 tokens
+        max_length = 8000
         if len(text) > max_length:
             text = text[:max_length]
         
@@ -72,11 +67,9 @@ class VectorService:
         return text
     
     def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings in batches using OpenAI API"""
         try:
             processed_texts = [self._preprocess_text(text) for text in texts]
             
-            # OpenAI allows batching
             response = self.openai_client.embeddings.create(
                 input=processed_texts,
                 model="text-embedding-3-small"
@@ -111,7 +104,6 @@ class VectorService:
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 vector_id = self._generate_chunk_id(user_id, chunk.get("filename", "unknown"), i)
                 
-                # Build metadata - Pinecone doesn't accept null/None values
                 metadata = {
                     "user_id": user_id,
                     "document_id": document_id or chunk.get("document_id", "unknown"),
@@ -122,7 +114,6 @@ class VectorService:
                     "end_char": chunk.get("end_char", 0)
                 }
                 
-                # Only add optional fields if they have values (not None)
                 if chunk.get("title"):
                     metadata["title"] = chunk.get("title")
                 if chunk.get("author"):

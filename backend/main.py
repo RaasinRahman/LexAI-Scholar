@@ -9,7 +9,6 @@ from datetime import datetime
 import uuid
 
 from pdf_service import PDFProcessor
-# Use OpenAI embeddings instead of sentence-transformers (memory efficient)
 from vector_service_openai import VectorService
 from rag_service import RAGService
 from case_brief_service import CaseBriefService
@@ -794,26 +793,20 @@ async def get_document_content(
         user_id = current_user.user.id
         user_supabase = get_user_supabase_client(access_token)
         
-        # Try to get document - RLS will handle access control
-        # The RLS policy allows access if user owns it OR if it's shared via workspace
         doc_result = user_supabase.table("documents").select("*").eq("id", document_id).execute()
         
         if not doc_result.data or len(doc_result.data) == 0:
-            # Document not found or user doesn't have access (blocked by RLS)
             raise HTTPException(status_code=404, detail="Document not found or access denied")
         
         document = doc_result.data[0]
         
-        # Query vector store for all chunks of this document
         query_results = vector_service.search_by_filter(
             filter_dict={"document_id": document_id},
-            top_k=10000  # Get all chunks
+            top_k=10000
         )
         
-        # Sort chunks by chunk_id to maintain order
         sorted_chunks = sorted(query_results.get("matches", []), key=lambda x: x.get("metadata", {}).get("chunk_id", 0))
         
-        # Reconstruct full text
         full_text_parts = []
         chunks_data = []
         
@@ -857,9 +850,6 @@ async def create_annotation(
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """
-    Create an annotation (highlight, note, or comment) on a document.
-    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -905,9 +895,6 @@ async def get_annotations(
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """
-    Get all annotations for a document.
-    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -944,9 +931,6 @@ async def update_annotation(
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """
-    Update an annotation's content or color.
-    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -987,9 +971,6 @@ async def delete_annotation(
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """
-    Delete an annotation.
-    """
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase not configured")
     
@@ -1028,10 +1009,6 @@ async def generate_case_brief(
     request: CaseBriefRequest,
     current_user = Depends(get_current_user)
 ):
-    """
-    Generate a structured case brief from a legal document
-    Supports full briefs or quick summaries
-    """
     if not case_brief_service:
         raise HTTPException(status_code=503, detail="Case Brief service not available. OpenAI API key not configured.")
     
@@ -1043,16 +1020,13 @@ async def generate_case_brief(
         
         print(f"[CASE BRIEF] Generating {request.brief_type} brief for document {request.document_id}")
         
-        # Retrieve all chunks for this document from vector database
-        # We use a broad query to get all chunks from the document
         all_chunks = vector_service.search_similar(
             query="case law facts issues holding reasoning disposition court decision",
             user_id=user_id,
-            top_k=100,  # Get many chunks
-            min_score=0.0  # Accept all chunks from the document
+            top_k=100,
+            min_score=0.0
         )
         
-        # Filter to only chunks from the requested document
         document_chunks = [
             chunk for chunk in all_chunks 
             if chunk.get('document_id') == request.document_id
@@ -1066,7 +1040,6 @@ async def generate_case_brief(
         
         print(f"[CASE BRIEF] Found {len(document_chunks)} chunks for document")
         
-        # Generate the case brief
         brief_result = case_brief_service.generate_case_brief(
             document_chunks=document_chunks,
             document_id=request.document_id,
@@ -1099,9 +1072,6 @@ async def extract_case_section(
     section: str,
     current_user = Depends(get_current_user)
 ):
-    """
-    Extract a specific section from a case (facts, issues, holding, reasoning, etc.)
-    """
     if not case_brief_service:
         raise HTTPException(status_code=503, detail="Case Brief service not available")
     
@@ -1111,7 +1081,6 @@ async def extract_case_section(
     try:
         user_id = current_user.user.id
         
-        # Retrieve document chunks
         all_chunks = vector_service.search_similar(
             query=f"case {section}",
             user_id=user_id,
@@ -1127,7 +1096,6 @@ async def extract_case_section(
         if not document_chunks:
             raise HTTPException(status_code=404, detail="Document not found")
         
-        # Extract the section
         result = case_brief_service.extract_specific_section(
             document_chunks=document_chunks,
             section=section
@@ -1146,9 +1114,6 @@ async def compare_cases(
     request: CaseBriefCompareRequest,
     current_user = Depends(get_current_user)
 ):
-    """
-    Compare multiple case briefs and provide comparative analysis
-    """
     if not case_brief_service:
         raise HTTPException(status_code=503, detail="Case Brief service not available")
     
@@ -1163,10 +1128,8 @@ async def compare_cases(
         
         print(f"[CASE BRIEF] Comparing {len(request.document_ids)} cases")
         
-        # Generate briefs for each document
         case_briefs = []
         for doc_id in request.document_ids:
-            # Get document chunks
             all_chunks = vector_service.search_similar(
                 query="case law legal",
                 user_id=user_id,
@@ -1183,11 +1146,10 @@ async def compare_cases(
                 print(f"[WARNING] No chunks found for document {doc_id}")
                 continue
             
-            # Generate brief
             brief = case_brief_service.generate_case_brief(
                 document_chunks=document_chunks,
                 document_id=doc_id,
-                brief_type="summary",  # Use summary for comparison to save tokens
+                brief_type="summary",
                 temperature=0.2,
                 max_tokens=1500
             )
@@ -1201,7 +1163,6 @@ async def compare_cases(
                 detail="Could not generate briefs for at least 2 documents"
             )
         
-        # Compare the cases
         comparison = case_brief_service.compare_cases(
             case_briefs=case_briefs,
             comparison_focus=request.comparison_focus,
@@ -1249,14 +1210,11 @@ async def debug_user_vectors(current_user = Depends(get_current_user)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Debug failed: {str(e)}")
 
-# ==================== WORKSPACE ENDPOINTS ====================
-
 @app.post("/workspaces")
 async def create_workspace(
     request: CreateWorkspaceRequest,
     current_user = Depends(get_current_user)
 ):
-    """Create a new collaborative workspace"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1283,7 +1241,6 @@ async def create_workspace(
 
 @app.get("/workspaces")
 async def list_workspaces(current_user = Depends(get_current_user)):
-    """Get all workspaces the current user is a member of"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1307,7 +1264,6 @@ async def get_workspace(
     workspace_id: str,
     current_user = Depends(get_current_user)
 ):
-    """Get workspace details"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1332,7 +1288,6 @@ async def update_workspace(
     request: UpdateWorkspaceRequest,
     current_user = Depends(get_current_user)
 ):
-    """Update workspace settings (admin/owner only)"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1358,7 +1313,6 @@ async def delete_workspace(
     workspace_id: str,
     current_user = Depends(get_current_user)
 ):
-    """Delete a workspace (owner only)"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1383,7 +1337,6 @@ async def invite_member_by_email(
     request: InviteMemberByEmailRequest,
     current_user = Depends(get_current_user)
 ):
-    """Invite a member to a workspace by their email address"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1420,7 +1373,6 @@ async def add_workspace_member(
     request: AddMemberRequest,
     current_user = Depends(get_current_user)
 ):
-    """Add a member to a workspace (by user ID - legacy method)"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1456,14 +1408,12 @@ async def get_workspace_members(
     workspace_id: str,
     current_user = Depends(get_current_user)
 ):
-    """Get all members of a workspace"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
     try:
         user_id = current_user.user.id
         
-        # Check if user is a member
         if not workspace_service.is_member(workspace_id, user_id):
             raise HTTPException(status_code=403, detail="Access denied")
         
@@ -1482,7 +1432,6 @@ async def remove_workspace_member(
     member_id: str,
     current_user = Depends(get_current_user)
 ):
-    """Remove a member from a workspace"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1508,7 +1457,6 @@ async def update_member_role(
     request: UpdateMemberRoleRequest,
     current_user = Depends(get_current_user)
 ):
-    """Update a member's role"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1544,7 +1492,6 @@ async def share_document_with_workspace(
     request: ShareDocumentRequest,
     current_user = Depends(get_current_user)
 ):
-    """Share a document with a workspace"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1575,7 +1522,6 @@ async def unshare_document(
     document_id: str,
     current_user = Depends(get_current_user)
 ):
-    """Remove a document from workspace sharing"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1600,11 +1546,9 @@ async def get_workspace_documents(
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """Get all documents shared in a workspace"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
-    # Extract access token for user-authenticated client
     access_token = authorization.replace("Bearer ", "") if authorization else None
     if not access_token:
         raise HTTPException(status_code=401, detail="Access token required")
@@ -1612,10 +1556,8 @@ async def get_workspace_documents(
     try:
         user_id = current_user.user.id
         
-        # Create user-authenticated Supabase client to respect RLS policies
         user_supabase = get_user_supabase_client(access_token)
         
-        # Pass user client to workspace service for proper RLS handling
         result = workspace_service.get_workspace_documents(workspace_id, user_id, user_client=user_supabase)
         
         if not result.get("success"):
@@ -1634,7 +1576,6 @@ async def add_document_comment(
     request: AddCommentRequest,
     current_user = Depends(get_current_user)
 ):
-    """Add a comment to a document in a workspace"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1666,7 +1607,6 @@ async def get_document_comments(
     document_id: str,
     current_user = Depends(get_current_user)
 ):
-    """Get all comments for a document"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1691,7 +1631,6 @@ async def get_workspace_activity(
     current_user = Depends(get_current_user),
     limit: int = 50
 ):
-    """Get activity feed for a workspace"""
     if not workspace_service:
         raise HTTPException(status_code=503, detail="Workspace service not available")
     
@@ -1710,17 +1649,11 @@ async def get_workspace_activity(
         print(f"[WORKSPACE] Error in get activity endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==================== PRACTICE QUESTIONS ENDPOINTS ====================
-
 @app.post("/practice-questions/generate")
 async def generate_practice_questions(
     request: GeneratePracticeQuestionsRequest,
     current_user = Depends(get_current_user)
 ):
-    """
-    Generate practice questions from a document
-    Supports multiple question types and difficulty levels
-    """
     if not practice_questions_service:
         raise HTTPException(status_code=503, detail="Practice Questions service not available. OpenAI API key not configured.")
     
@@ -1732,7 +1665,6 @@ async def generate_practice_questions(
         
         print(f"[PRACTICE QUESTIONS] Generating questions for document {request.document_id}")
         
-        # Retrieve document chunks from vector database
         all_chunks = vector_service.search_similar(
             query="legal case facts issues holding reasoning",
             user_id=user_id,
@@ -1740,7 +1672,6 @@ async def generate_practice_questions(
             min_score=0.0
         )
         
-        # Filter to only chunks from the requested document
         document_chunks = [
             chunk for chunk in all_chunks 
             if chunk.get('document_id') == request.document_id
@@ -1754,7 +1685,6 @@ async def generate_practice_questions(
         
         print(f"[PRACTICE QUESTIONS] Found {len(document_chunks)} chunks for document")
         
-        # Generate practice questions
         result = practice_questions_service.generate_questions(
             document_chunks=document_chunks,
             document_id=request.document_id,
@@ -1788,9 +1718,6 @@ async def generate_quiz(
     request: GenerateQuizRequest,
     current_user = Depends(get_current_user)
 ):
-    """
-    Generate a comprehensive quiz from multiple documents
-    """
     if not practice_questions_service:
         raise HTTPException(status_code=503, detail="Practice Questions service not available")
     
@@ -1805,7 +1732,6 @@ async def generate_quiz(
         
         print(f"[PRACTICE QUESTIONS] Generating quiz from {len(request.document_ids)} documents")
         
-        # Retrieve chunks for all documents
         document_chunks_map = {}
         
         for doc_id in request.document_ids:
@@ -1830,7 +1756,6 @@ async def generate_quiz(
                 detail="No content found for the specified documents"
             )
         
-        # Generate quiz
         result = practice_questions_service.generate_quiz(
             document_ids=list(document_chunks_map.keys()),
             document_chunks_map=document_chunks_map,
@@ -1863,10 +1788,6 @@ async def evaluate_answer(
     request: EvaluateAnswerRequest,
     current_user = Depends(get_current_user)
 ):
-    """
-    Evaluate a user's answer to a practice question
-    Provides feedback and scoring
-    """
     if not practice_questions_service:
         raise HTTPException(status_code=503, detail="Practice Questions service not available")
     
@@ -1895,17 +1816,12 @@ async def evaluate_answer(
         print(f"[PRACTICE QUESTIONS] Error in evaluate endpoint: {e}")
         raise HTTPException(status_code=500, detail=f"Answer evaluation failed: {str(e)}")
 
-# ==================== ANALYTICS ENDPOINTS ====================
-
 @app.post("/analytics/record-session")
 async def record_quiz_session(
     request: RecordQuizSessionRequest,
     current_user = Depends(get_current_user),
     authorization: str = Header(None)
 ):
-    """
-    Record a completed quiz session for analytics tracking
-    """
     if not analytics_service:
         raise HTTPException(status_code=503, detail="Analytics service not available")
     
@@ -1920,14 +1836,11 @@ async def record_quiz_session(
         user_id = current_user.user.id
         user_supabase = get_user_supabase_client(access_token)
         
-        # Calculate score percentage
         score_percentage = (request.correct_answers / request.total_questions * 100) if request.total_questions > 0 else 0
         
-        # Parse timestamps
         start_time_str = request.start_time
         end_time_str = request.end_time or datetime.utcnow().isoformat()
         
-        # Calculate time spent
         try:
             start_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
@@ -1935,7 +1848,6 @@ async def record_quiz_session(
         except:
             time_spent_seconds = 0
         
-        # Prepare session data for database
         session_data = {
             "user_id": user_id,
             "quiz_id": request.quiz_id,
@@ -1952,7 +1864,6 @@ async def record_quiz_session(
             "completed_at": end_time_str
         }
         
-        # Store in Supabase
         result = user_supabase.table("quiz_sessions").insert(session_data).execute()
         
         if not result.data or len(result.data) == 0:
@@ -1981,10 +1892,6 @@ async def get_progress_analytics(
     time_period_days: Optional[int] = None,
     authorization: str = Header(None)
 ):
-    """
-    Get comprehensive progress analytics and metrics
-    Returns performance trends, weak areas, and learning statistics
-    """
     if not analytics_service:
         raise HTTPException(status_code=503, detail="Analytics service not available")
     
@@ -2001,16 +1908,13 @@ async def get_progress_analytics(
         
         print(f"[ANALYTICS] Fetching progress for user {user_id}")
         
-        # Build query for quiz history
         query = user_supabase.table("quiz_sessions").select("*").eq("user_id", user_id)
         
-        # Apply time period filter if specified
         if time_period_days:
             from datetime import timedelta
             cutoff_date = datetime.utcnow() - timedelta(days=time_period_days)
             query = query.gte("completed_at", cutoff_date.isoformat())
         
-        # Fetch quiz history from database
         result = query.order("completed_at", desc=False).execute()
         quiz_history = result.data or []
         
@@ -2031,16 +1935,13 @@ async def get_progress_analytics(
                 }
             }
         
-        # Calculate progress metrics
         metrics = analytics_service.calculate_progress_metrics(quiz_history)
         
         if not metrics.get("success"):
             raise HTTPException(status_code=500, detail=metrics.get("error", "Failed to calculate metrics"))
         
-        # Get knowledge gaps
         gaps = analytics_service.identify_knowledge_gaps(quiz_history)
         
-        # Add gaps to metrics
         if gaps.get("success"):
             metrics["gaps"] = gaps.get("gaps", {})
         
@@ -2060,9 +1961,6 @@ async def get_performance_summary(
     time_period_days: Optional[int] = 7,
     authorization: str = Header(None)
 ):
-    """
-    Get a summary of performance for a specific time period
-    """
     if not analytics_service:
         raise HTTPException(status_code=503, detail="Analytics service not available")
     
@@ -2077,7 +1975,6 @@ async def get_performance_summary(
         user_id = current_user.user.id
         user_supabase = get_user_supabase_client(access_token)
         
-        # Build query for quiz history
         from datetime import timedelta
         cutoff_date = datetime.utcnow() - timedelta(days=time_period_days)
         
@@ -2097,16 +1994,11 @@ async def get_performance_summary(
         print(f"[ANALYTICS] Error getting summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==================== STUDY PLAN ENDPOINTS ====================
-
 @app.post("/study-plan/generate")
 async def generate_study_plan(
     request: GenerateStudyPlanRequest,
     current_user = Depends(get_current_user)
 ):
-    """
-    Generate a personalized study plan based on user performance and goals
-    """
     if not study_plan_service:
         raise HTTPException(status_code=503, detail="Study Plan service not available. OpenAI API key not configured.")
     
@@ -2118,16 +2010,13 @@ async def generate_study_plan(
         
         print(f"[STUDY PLAN] Generating plan for user {user_id}")
         
-        # Get user performance analytics
-        quiz_history = []  # TODO: Get from database
+        quiz_history = []
         performance = analytics_service.calculate_progress_metrics(quiz_history)
         
-        # Get knowledge gaps
         gaps = analytics_service.identify_knowledge_gaps(quiz_history)
         if gaps.get("success"):
             performance["gaps"] = gaps.get("gaps", {})
         
-        # Get available documents
         documents = []
         if supabase:
             try:
@@ -2136,7 +2025,6 @@ async def generate_study_plan(
             except Exception as e:
                 print(f"[STUDY PLAN] Error fetching documents: {e}")
         
-        # Generate study plan
         result = study_plan_service.generate_study_plan(
             user_performance=performance,
             available_documents=documents,
@@ -2166,9 +2054,6 @@ async def generate_study_plan(
 async def get_quick_recommendations(
     current_user = Depends(get_current_user)
 ):
-    """
-    Get quick study recommendations without generating a full plan
-    """
     if not study_plan_service:
         raise HTTPException(status_code=503, detail="Study Plan service not available")
     
@@ -2178,16 +2063,13 @@ async def get_quick_recommendations(
     try:
         user_id = current_user.user.id
         
-        # Get user performance
-        quiz_history = []  # TODO: Get from database
+        quiz_history = []
         performance = analytics_service.calculate_progress_metrics(quiz_history)
         
-        # Get knowledge gaps
         gaps = analytics_service.identify_knowledge_gaps(quiz_history)
         if gaps.get("success"):
             performance["gaps"] = gaps.get("gaps", {})
         
-        # Generate recommendations
         result = study_plan_service.generate_quick_recommendations(
             user_performance=performance,
             recent_quiz_results=quiz_history[-5:] if quiz_history else []

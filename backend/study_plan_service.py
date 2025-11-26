@@ -1,8 +1,3 @@
-"""
-Study Plan Recommendation Engine
-AI-powered personalized study plan generation based on user performance
-"""
-
 from typing import List, Dict, Any, Optional
 import openai
 import os
@@ -11,19 +6,8 @@ import json
 
 
 class StudyPlanService:
-    """
-    Service for generating personalized study plans and recommendations
-    Uses AI to analyze performance and create customized learning paths
-    """
     
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
-        """
-        Initialize Study Plan Service
-        
-        Args:
-            openai_api_key: OpenAI API key
-            model: OpenAI model to use
-        """
         self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API key is required")
@@ -40,25 +24,12 @@ class StudyPlanService:
         goals: Optional[Dict[str, Any]] = None,
         time_commitment: str = "moderate"
     ) -> Dict[str, Any]:
-        """
-        Generate a personalized study plan based on performance analytics
         
-        Args:
-            user_performance: Analytics data including scores, weak areas, etc.
-            available_documents: List of documents user has access to
-            goals: Optional user goals (exam date, target score, etc.)
-            time_commitment: 'light' (15min/day), 'moderate' (30min/day), 'intensive' (1hr/day)
-            
-        Returns:
-            Comprehensive study plan with daily recommendations
-        """
         try:
             print(f"[STUDY PLAN] Generating plan for time commitment: {time_commitment}")
             
-            # Prepare context for AI
             context = self._prepare_context(user_performance, available_documents, goals, time_commitment)
             
-            # Generate study plan using AI
             prompt = self._create_study_plan_prompt(context)
             
             response = openai.chat.completions.create(
@@ -79,16 +50,13 @@ class StudyPlanService:
             
             plan_text = response.choices[0].message.content.strip()
             
-            # Parse the study plan
             study_plan = self._parse_study_plan(plan_text)
             
-            # Add metadata
             study_plan["generated_at"] = datetime.utcnow().isoformat()
             study_plan["time_commitment"] = time_commitment
             study_plan["user_level"] = self._determine_user_level(user_performance)
             study_plan["goals"] = goals or {}
             
-            # Calculate usage
             usage = {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,

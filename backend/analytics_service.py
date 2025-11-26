@@ -1,8 +1,3 @@
-"""
-Analytics Service
-Tracks user progress, quiz performance, and learning analytics
-"""
-
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -10,13 +5,8 @@ import statistics
 
 
 class AnalyticsService:
-    """
-    Service for tracking and analyzing user learning progress
-    Provides insights into quiz performance, learning trends, and knowledge gaps
-    """
     
     def __init__(self):
-        """Initialize Analytics Service"""
         print("[ANALYTICS] Initialized successfully")
     
     def record_quiz_session(
@@ -24,23 +14,12 @@ class AnalyticsService:
         user_id: str,
         quiz_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """
-        Record a completed quiz session for analytics
         
-        Args:
-            user_id: User identifier
-            quiz_data: Quiz session data including questions, answers, scores
-            
-        Returns:
-            Success confirmation with session summary
-        """
         try:
-            # Extract key metrics
             total_questions = quiz_data.get('total_questions', 0)
             correct_answers = quiz_data.get('correct_answers', 0)
             score_percentage = (correct_answers / total_questions * 100) if total_questions > 0 else 0
             
-            # Calculate time spent (if available)
             start_time = quiz_data.get('start_time')
             end_time = quiz_data.get('end_time', datetime.utcnow().isoformat())
             
@@ -84,15 +63,7 @@ class AnalyticsService:
         self,
         quiz_history: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """
-        Calculate comprehensive progress metrics from quiz history
         
-        Args:
-            quiz_history: List of completed quiz sessions
-            
-        Returns:
-            Dictionary of progress metrics and analytics
-        """
         try:
             if not quiz_history:
                 return {

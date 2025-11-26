@@ -1,8 +1,3 @@
-"""
-Practice Questions Generator Service
-Generates practice questions from legal documents to help users study and test their knowledge
-"""
-
 from typing import List, Dict, Any, Optional
 import openai
 import os
@@ -11,19 +6,8 @@ import json
 
 
 class PracticeQuestionsService:
-    """
-    Service for generating practice questions from documents
-    Supports multiple question types: multiple choice, short answer, true/false
-    """
     
     def __init__(self, openai_api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
-        """
-        Initialize Practice Questions Service
-        
-        Args:
-            openai_api_key: OpenAI API key
-            model: OpenAI model to use
-        """
         self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API key is required")
@@ -43,21 +27,6 @@ class PracticeQuestionsService:
         focus_area: Optional[str] = None,
         temperature: float = 0.7
     ) -> Dict[str, Any]:
-        """
-        Generate practice questions from document content
-        
-        Args:
-            document_chunks: Document chunks containing the content
-            document_id: ID of the document
-            question_count: Number of questions to generate
-            question_types: List of question types ['multiple_choice', 'short_answer', 'true_false']
-            difficulty: Difficulty level ('easy', 'medium', 'hard')
-            focus_area: Optional specific topic to focus on
-            temperature: LLM temperature for creativity
-            
-        Returns:
-            Dictionary containing generated questions and metadata
-        """
         
         try:
             if not document_chunks:
@@ -66,21 +35,17 @@ class PracticeQuestionsService:
                     "error": "No document content provided"
                 }
             
-            # Default question types if not specified
             if not question_types:
                 question_types = ["multiple_choice", "short_answer", "true_false"]
             
-            # Combine document chunks into context
             context = self._prepare_context(document_chunks)
             
-            # Get document metadata
             document_name = document_chunks[0].get('filename', 'Unknown Document')
             document_title = document_chunks[0].get('title', '')
             
             print(f"[PRACTICE QUESTIONS] Generating {question_count} questions for document {document_id}")
             print(f"[PRACTICE QUESTIONS] Types: {question_types}, Difficulty: {difficulty}")
             
-            # Generate questions using LLM
             prompt = self._create_question_generation_prompt(
                 context=context,
                 question_count=question_count,

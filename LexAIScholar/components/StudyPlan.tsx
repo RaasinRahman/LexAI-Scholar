@@ -15,7 +15,10 @@ import {
   TrendingUp,
   Loader2,
   AlertCircle,
-  Play
+  Play,
+  Moon,
+  Sun,
+  Flame
 } from 'lucide-react';
 
 interface DailyTask {
@@ -167,7 +170,6 @@ export default function StudyPlan() {
     }
   };
 
-  // Render setup view
   if (!studyPlan) {
     return (
       <div className="space-y-6">
@@ -224,9 +226,9 @@ export default function StudyPlan() {
             </label>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { value: 'light' as const, label: 'Light', time: '15-20 min/day', icon: '🌙' },
-                { value: 'moderate' as const, label: 'Moderate', time: '30-45 min/day', icon: '☀️' },
-                { value: 'intensive' as const, label: 'Intensive', time: '1-2 hours/day', icon: '🔥' }
+                { value: 'light' as const, label: 'Light', time: '15-20 min/day', Icon: Moon },
+                { value: 'moderate' as const, label: 'Moderate', time: '30-45 min/day', Icon: Sun },
+                { value: 'intensive' as const, label: 'Intensive', time: '1-2 hours/day', Icon: Flame }
               ].map(option => (
                 <button
                   key={option.value}
@@ -237,7 +239,9 @@ export default function StudyPlan() {
                       : 'border-slate-600 bg-slate-800/30 hover:border-slate-500'
                   }`}
                 >
-                  <div className="text-2xl mb-2">{option.icon}</div>
+                  <div className="flex justify-center mb-2">
+                    <option.Icon className="w-8 h-8 text-blue-400" />
+                  </div>
                   <div className="font-medium text-white mb-1">{option.label}</div>
                   <div className="text-xs text-gray-400">{option.time}</div>
                 </button>
@@ -320,14 +324,12 @@ export default function StudyPlan() {
     );
   }
 
-  // Render study plan view
   const completedDays = studyPlan.daily_tasks.filter(t => t.completed).length;
   const progressPercentage = (completedDays / studyPlan.daily_tasks.length) * 100;
   const currentTask = studyPlan.daily_tasks.find(t => t.day === currentDay);
 
   return (
     <div className="space-y-6">
-      {/* Plan Header */}
       <div className="bg-gradient-to-r from-purple-900/50 to-blue-900/50 border border-purple-700/50 rounded-lg p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -350,7 +352,6 @@ export default function StudyPlan() {
           </button>
         </div>
 
-        {/* Progress */}
         <div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium text-gray-300">
@@ -367,7 +368,6 @@ export default function StudyPlan() {
         </div>
       </div>
 
-      {/* Focus Areas */}
       <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
         <h3 className="text-sm font-medium text-gray-400 mb-3">Focus Areas</h3>
         <div className="flex flex-wrap gap-2">
@@ -382,7 +382,6 @@ export default function StudyPlan() {
         </div>
       </div>
 
-      {/* Daily Tasks */}
       <div className="grid md:grid-cols-7 gap-3">
         {studyPlan.daily_tasks.map((task) => (
           <button
@@ -405,7 +404,6 @@ export default function StudyPlan() {
         ))}
       </div>
 
-      {/* Current Day Detail */}
       {currentTask && (
         <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
           <div className="flex items-start justify-between mb-4">
@@ -421,17 +419,23 @@ export default function StudyPlan() {
             </div>
             <button
               onClick={() => markDayComplete(currentTask.day)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
                 currentTask.completed
                   ? 'bg-green-600 hover:bg-green-700 text-white'
                   : 'bg-blue-600 hover:bg-blue-700 text-white'
               }`}
             >
-              {currentTask.completed ? 'Completed ✓' : 'Mark Complete'}
+              {currentTask.completed ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  Completed
+                </>
+              ) : (
+                'Mark Complete'
+              )}
             </button>
           </div>
 
-          {/* Tasks */}
           <div className="space-y-4">
             {currentTask.tasks.map((task, idx) => (
               <div key={idx} className="bg-slate-900/50 rounded-lg p-4">
@@ -459,7 +463,6 @@ export default function StudyPlan() {
             ))}
           </div>
 
-          {/* Goal */}
           <div className="mt-4 p-4 bg-purple-900/20 border border-purple-700/30 rounded-lg">
             <h4 className="text-sm font-medium text-purple-400 mb-1 flex items-center gap-2">
               <Target className="w-4 h-4" />
@@ -470,7 +473,6 @@ export default function StudyPlan() {
         </div>
       )}
 
-      {/* Weekly Goals */}
       <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6">
         <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
           <Award className="w-5 h-5 text-yellow-400" />
@@ -486,7 +488,6 @@ export default function StudyPlan() {
         </ul>
       </div>
 
-      {/* Study Tips */}
       <div className="bg-gradient-to-r from-yellow-900/20 to-orange-900/20 border border-yellow-700/50 rounded-lg p-6">
         <h3 className="text-lg font-bold text-yellow-400 mb-4 flex items-center gap-2">
           <Lightbulb className="w-5 h-5" />

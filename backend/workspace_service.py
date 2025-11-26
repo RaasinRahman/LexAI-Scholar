@@ -1,8 +1,3 @@
-"""
-Collaborative Workspace Service
-Enables team collaboration, document sharing, and activity tracking
-"""
-
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from enum import Enum
@@ -10,7 +5,6 @@ import uuid
 
 
 class WorkspaceRole(str, Enum):
-    """User roles within a workspace"""
     OWNER = "owner"
     ADMIN = "admin"
     EDITOR = "editor"
@@ -18,22 +12,10 @@ class WorkspaceRole(str, Enum):
 
 
 class WorkspaceService:
-    """
-    Service for managing collaborative workspaces
-    Handles workspace creation, membership, permissions, and activities
-    """
     
     def __init__(self, supabase_client):
-        """
-        Initialize workspace service
-        
-        Args:
-            supabase_client: Supabase client instance
-        """
         self.supabase = supabase_client
         print("[WORKSPACE] Workspace service initialized")
-    
-    # ==================== WORKSPACE MANAGEMENT ====================
     
     def create_workspace(
         self,
@@ -42,22 +24,10 @@ class WorkspaceService:
         owner_id: str,
         settings: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        Create a new collaborative workspace
         
-        Args:
-            name: Workspace name
-            description: Workspace description
-            owner_id: User ID of the workspace creator
-            settings: Optional workspace settings (visibility, features, etc.)
-            
-        Returns:
-            Created workspace data
-        """
         try:
             workspace_id = str(uuid.uuid4())
             
-            # Default settings
             default_settings = {
                 "visibility": "private",  # private or public
                 "allow_document_upload": True,
@@ -79,10 +49,8 @@ class WorkspaceService:
                 "updated_at": datetime.utcnow().isoformat()
             }
             
-            # Create workspace
             result = self.supabase.table("workspaces").insert(workspace_data).execute()
             
-            # Add owner as member
             self.add_member(
                 workspace_id=workspace_id,
                 user_id=owner_id,
@@ -90,7 +58,6 @@ class WorkspaceService:
                 added_by=owner_id
             )
             
-            # Log activity
             self.log_activity(
                 workspace_id=workspace_id,
                 user_id=owner_id,
@@ -113,25 +80,14 @@ class WorkspaceService:
             }
     
     def get_workspace(self, workspace_id: str, user_id: str) -> Dict[str, Any]:
-        """
-        Get workspace details (if user has access)
         
-        Args:
-            workspace_id: Workspace ID
-            user_id: User ID requesting access
-            
-        Returns:
-            Workspace data with member information
-        """
         try:
-            # Check if user is a member
             if not self.is_member(workspace_id, user_id):
                 return {
                     "success": False,
                     "error": "Access denied. You are not a member of this workspace."
                 }
             
-            # Get workspace
             workspace_result = self.supabase.table("workspaces").select("*").eq("id", workspace_id).execute()
             
             if not workspace_result.data:
@@ -142,14 +98,11 @@ class WorkspaceService:
             
             workspace = workspace_result.data[0]
             
-            # Get user's role in this workspace
             user_role = self.get_member_role(workspace_id, user_id)
             workspace["user_role"] = user_role.value if user_role else None
             
-            # Get members
             members = self.get_members(workspace_id)
             
-            # Get document count
             doc_count_result = self.supabase.table("workspace_documents").select("id", count="exact").eq("workspace_id", workspace_id).execute()
             
             workspace["member_count"] = len(members.get("members", []))

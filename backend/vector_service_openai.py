@@ -10,7 +10,7 @@ from openai import OpenAI
 
 
 class VectorService:
-    def __init__(self, pinecone_api_key: str, openai_api_key: str, index_name: str = "lexai-qa-index"):
+    def __init__(self, pinecone_api_key: str, openai_api_key: str, index_name: str = "lexai-openai-index"):
         print("Initializing OpenAI client for embeddings...")
         self.openai_client = OpenAI(api_key=openai_api_key)
         self.embedding_dimension = 1536  # OpenAI text-embedding-3-small dimension
@@ -111,18 +111,24 @@ class VectorService:
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 vector_id = self._generate_chunk_id(user_id, chunk.get("filename", "unknown"), i)
                 
+                # Build metadata - Pinecone doesn't accept null/None values
                 metadata = {
                     "user_id": user_id,
                     "document_id": document_id or chunk.get("document_id", "unknown"),
                     "filename": chunk.get("filename", "unknown"),
-                    "title": chunk.get("title"),
-                    "author": chunk.get("author"),
                     "chunk_id": i,
                     "text": chunk["text"][:1000],
-                    "page_number": chunk.get("page_number"),
                     "start_char": chunk.get("start_char", 0),
                     "end_char": chunk.get("end_char", 0)
                 }
+                
+                # Only add optional fields if they have values (not None)
+                if chunk.get("title"):
+                    metadata["title"] = chunk.get("title")
+                if chunk.get("author"):
+                    metadata["author"] = chunk.get("author")
+                if chunk.get("page_number") is not None:
+                    metadata["page_number"] = chunk.get("page_number")
                 
                 vectors.append({
                     "id": vector_id,

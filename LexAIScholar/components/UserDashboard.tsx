@@ -13,7 +13,7 @@ import WorkspaceSelector from './WorkspaceSelector';
 import PracticeQuestions from './PracticeQuestions';
 import Analytics from './Analytics';
 import StudyPlan from './StudyPlan';
-import { Upload, Search, Library, Target, Zap, Lock, Lightbulb, Hand, MessageSquare, Scale, Users, BookOpen, BarChart3, Calendar } from 'lucide-react';
+import { Upload, Library, Target, Zap, Lock, Lightbulb, Hand, MessageSquare, Scale, Users, BookOpen, BarChart3, Calendar } from 'lucide-react';
 
 export default function UserDashboard() {
   const { user } = useAuth();
@@ -127,17 +127,6 @@ export default function UserDashboard() {
               Workspace
             </button>
           )}
-          <button
-            onClick={() => setActiveTab('search')}
-            className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'search'
-                ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <Search className="w-4 h-4" />
-            Search
-          </button>
           <button
             onClick={() => setActiveTab('upload')}
             className={`px-4 py-3 font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${

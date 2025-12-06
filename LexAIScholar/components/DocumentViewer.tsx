@@ -170,9 +170,10 @@ export default function DocumentViewer({ documentId, workspaceId, onClose }: Doc
       end: endPos,
     });
     
+    // For a fixed-position menu, we want viewport coordinates (no scroll offset)
     setMenuPosition({
-      x: rect.left + window.scrollX,
-      y: rect.bottom + window.scrollY + 5,
+      x: rect.left,
+      y: rect.bottom + 5,
     });
     
     setShowAnnotationMenu(true);
